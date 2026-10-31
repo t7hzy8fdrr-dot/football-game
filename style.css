@@ -1,0 +1,86 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: #07090d;
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #fff; user-select: none; -webkit-user-select: none; touch-action: none;
+}
+canvas { display: block; }
+
+.overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(5,10,20,.35), rgba(5,8,14,.82));
+  z-index: 10;
+}
+.hidden { display: none !important; }
+.panel {
+  width: min(520px, 92vw); max-height: 94vh; overflow: auto;
+  padding: 28px 30px 22px; border-radius: 18px; text-align: center;
+  background: linear-gradient(180deg, rgba(18,24,36,.92), rgba(10,14,22,.95));
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.panel.small { width: min(380px, 92vw); }
+.logo {
+  font-size: clamp(40px, 9vw, 64px); font-weight: 900; letter-spacing: 3px; line-height: 1;
+  background: linear-gradient(180deg, #fff6c9 0%, #ffd34d 45%, #d18a00 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 0 rgba(0,0,0,.45));
+}
+.logo.smaller { font-size: 42px; margin-bottom: 14px; }
+.tagline { margin: 8px 0 18px; color: #9fb0c8; font-size: 15px; letter-spacing: .5px; }
+.teams { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 18px; font-weight: 800; }
+.team { display: inline-flex; align-items: center; gap: 8px; }
+.team i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+.team small { color: #9fb0c8; font-weight: 500; }
+.vs { color: #6c7a90; font-weight: 500; font-size: 13px; }
+.opt { margin: 10px 0; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #7f8ea6; margin-bottom: 6px; }
+.choices { display: inline-flex; background: rgba(255,255,255,.05); border-radius: 10px; padding: 3px; }
+.choices button {
+  border: 0; background: transparent; color: #c7d2e4; padding: 8px 14px; border-radius: 8px;
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.choices button.on { background: #ffd34d; color: #1a1406; font-weight: 800; }
+button.big {
+  display: block; width: 100%; margin: 18px 0 8px; padding: 14px; border: 0; border-radius: 12px;
+  font: inherit; font-size: 20px; font-weight: 900; letter-spacing: 2px; cursor: pointer; color: #1a1406;
+  background: linear-gradient(180deg, #ffe17a, #f5b400); box-shadow: 0 6px 0 #a87700, 0 10px 24px rgba(245,180,0,.3);
+}
+button.big:active { transform: translateY(3px); box-shadow: 0 3px 0 #a87700; }
+button.ghost {
+  display: block; width: 100%; padding: 10px; border-radius: 10px; cursor: pointer;
+  background: transparent; color: #c7d2e4; border: 1px solid rgba(255,255,255,.15); font: inherit;
+}
+.help { margin-top: 14px; font-size: 13px; color: #9fb0c8; line-height: 1.75; text-align: left; display: inline-block; }
+.help b { color: #fff; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 5px; font-weight: 700; }
+.final { font-size: 54px; font-weight: 900; margin: 4px 0 4px; letter-spacing: 4px; }
+
+/* touch controls */
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#stick {
+  position: absolute; left: 4vw; bottom: 6vh; width: 150px; height: 150px; border-radius: 50%;
+  background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.18); pointer-events: auto;
+}
+#knob {
+  position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+  background: rgba(255,255,255,.35); box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+#btns { position: absolute; right: 4vw; bottom: 6vh; display: flex; gap: 14px; align-items: flex-end; pointer-events: auto; }
+#btns button, #tPause {
+  border: 2px solid rgba(255,255,255,.25); color: #fff; font: inherit; font-weight: 900; border-radius: 50%;
+  background: rgba(15,20,30,.55); backdrop-filter: blur(2px);
+}
+#tSprint { width: 64px; height: 64px; font-size: 24px; }
+#tPass { width: 84px; height: 84px; font-size: 16px; background: rgba(40,140,255,.45) !important; }
+#tShoot { width: 100px; height: 100px; font-size: 18px; margin-bottom: 30px; background: rgba(230,50,60,.5) !important; }
+#tPause { position: absolute; top: 14px; right: 14px; width: 46px; height: 46px; pointer-events: auto; font-size: 14px; }
+
+@media (max-height: 500px) {
+  .panel { padding: 14px 20px 12px; }
+  .logo { font-size: 38px; }
+  .tagline { margin: 4px 0 8px; }
+  .teams { margin-bottom: 6px; }
+  .opt { margin: 4px 0; }
+  button.big { margin: 10px 0 4px; padding: 10px; }
+}
+@media (pointer: coarse) { .help { display: none; } }
