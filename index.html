@@ -7,7 +7,21 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game"></canvas>
+<div id="view"></div>
+<div id="vignette"></div>
+<div id="hud" class="hidden">
+  <div id="board">
+    <div class="b-logo">Г</div>
+    <div class="b-team"><i style="background:#d7263d"></i>ЛЕВ</div>
+    <div class="b-score" id="bScore">0–0</div>
+    <div class="b-team">ВОВ<i style="background:#2a6be0"></i></div>
+    <div class="b-time" id="bTime">00:00</div>
+  </div>
+  <canvas id="minimap" width="220" height="146"></canvas>
+  <div id="power"><div id="powerFill"></div></div>
+</div>
+<div id="banner"><div class="b-main"></div><div class="b-sub"></div></div>
+<div id="loading">Завантаження стадіону…</div>
 
 <div id="menu" class="overlay">
   <div class="panel">
@@ -40,7 +54,7 @@
       <div><b>Shift</b> — прискорення</div>
       <div><b>Пробіл</b> / <b>J</b> — пас (без м'яча — змінити гравця)</div>
       <div><b>K</b> / <b>X</b> — удар (затисніть для сили; без м'яча — відбір)</div>
-      <div><b>P</b> — пауза · <b>M</b> — звук</div>
+      <div><b>C</b> — камера · <b>P</b> — пауза · <b>M</b> — звук</div>
     </div>
   </div>
 </div>
@@ -72,6 +86,7 @@
   <button id="tPause">❚❚</button>
 </div>
 
+<script src="lib/three.min.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
