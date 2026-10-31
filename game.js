@@ -543,7 +543,16 @@ const EXTRA = [['jump', 'Jump_Loop'], ['fall', 'Death01'], ['dance', 'Dance_Loop
 function loadHumans() {
   if (!T3.GLTFLoader) return Promise.resolve(null);
   const gl = new T3.GLTFLoader(), tl = new T3.TextureLoader();
-  return Promise.all([gl.loadAsync('assets/player.glb'), gl.loadAsync('assets/anims.glb'), gl.loadAsync('assets/hair.glb'), tl.loadAsync('assets/skin_light.jpg')])
+  // моделі лежать у assets/models.js (base64) — підвантажуємо скрипт і розбираємо
+  const buf = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; };
+  const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
+  const script = new Promise((res, rej) => {
+    if (window.GOLEADOR_ASSETS) { res(); return; }
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=5'; sc.onload = res;
+    sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
+    document.head.appendChild(sc);
+  });
+  return script.then(() => { const A = window.GOLEADOR_ASSETS; return Promise.all([parse(A.player), parse(A.anims), parse(A.hair), tl.loadAsync(A.skin)]); })
     .then(([pl, an, hr, light]) => {
       let body = null, brows = null;
       pl.scene.traverse((o) => { if (o.isSkinnedMesh && o.name === 'SuperHero_Male') body = o; if (o.isSkinnedMesh && o.name === 'Eyebrows') brows = o; });
