@@ -54,8 +54,10 @@ const camModeEff = () => (isMobile && isPortrait() && !demo ? 2 : camMode);
 const T3 = THREE;
 if (T3.ColorManagement) T3.ColorManagement.legacyMode = false;   // кольори в sRGB, як на екрані
 const V = (x, y, z = 0) => new T3.Vector3(x - L / 2, z, y - W / 2);
-const renderer = new T3.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.6 : 2));
+let renderer;
+try { renderer = new T3.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
+catch (e) { if (window.__showErr) window.__showErr('Браузер не дав увімкнути 3D-графіку (WebGL). Спробуйте інший браузер або оновіть сторінку.'); throw e; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = T3.PCFSoftShadowMap;
@@ -1427,7 +1429,7 @@ function updateHUD() { $('bScore').textContent = `${score[0]}–${score[1]}`; $(
 function drawMinimap() {
   const w = mm.width, h = mm.height, pad = 6, sx = (w - 2 * pad) / L, sy = (h - 2 * pad) / W;
   mmc.clearRect(0, 0, w, h);
-  mmc.fillStyle = 'rgba(14,40,18,0.72)'; mmc.beginPath(); mmc.roundRect(0, 0, w, h, 8); mmc.fill();
+  mmc.fillStyle = 'rgba(14,40,18,0.72)'; mmc.beginPath(); if (mmc.roundRect) mmc.roundRect(0, 0, w, h, 8); else mmc.rect(0, 0, w, h); mmc.fill();
   mmc.strokeStyle = 'rgba(255,255,255,0.55)'; mmc.lineWidth = 1.2;
   mmc.strokeRect(pad, pad, L * sx, W * sy);
   mmc.beginPath(); mmc.moveTo(pad + L / 2 * sx, pad); mmc.lineTo(pad + L / 2 * sx, pad + W * sy); mmc.stroke();
@@ -1477,7 +1479,12 @@ function render(dt, now) {
 }
 
 let last = performance.now(), acc = 0;
+let frameErr = 0;
 function frame(now) {
+  requestAnimationFrame(frame);   // цикл не зупиниться, навіть якщо в кадрі станеться помилка
+  try { frameBody(now); } catch (e) { if (frameErr++ < 3) console.error(e); }
+}
+function frameBody(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!paused) {
     acc += dt;
@@ -1487,7 +1494,6 @@ function frame(now) {
     updateCamera(dt, now);
   }
   render(paused ? 0 : dt, now);
-  requestAnimationFrame(frame);
 }
 
 // ───────────────────────── Меню ─────────────────────────
@@ -1575,6 +1581,7 @@ $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').o
 buildPitch(); buildStadium(); buildBoards(); buildGoals(); buildBall();
 startMatch(true);
 $('loading').classList.add('hidden');
+window.__started = true;
 requestAnimationFrame(frame);
 
 window.GOLEADOR = {
