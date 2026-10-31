@@ -46,6 +46,9 @@ const HAIRS = [0x1b1209, 0x3b2412, 0x6b4320, 0xc9a15a, 0x0d0d0d, 0x7a3d18];
 const toW = (t, lx, ly) => (TEAMS[t].dir > 0 ? [lx, ly] : [L - lx, W - ly]);
 const toL = toW;
 const isMobile = window.matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
+const isPortrait = () => window.innerHeight > window.innerWidth * 1.05;
+// на телефоні, який тримають вертикально, — камера за спиною гравця (поле видно на весь екран)
+const camModeEff = () => (isMobile && isPortrait() && !demo ? 2 : camMode);
 
 // ───────────────────────── 3D-сцена ─────────────────────────
 const T3 = THREE;
@@ -67,11 +70,15 @@ scene.background = new T3.Color(0x0a1424);
 scene.fog = new T3.Fog(0x0a1424, 140, 320);
 const camera = new T3.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.5, 600);
 function onResize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => { setTimeout(onResize, 120); setTimeout(onResize, 500); });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+document.addEventListener('fullscreenchange', () => setTimeout(onResize, 60));
 
 // Світло: небо + прожектори
 scene.add(new T3.HemisphereLight(0xcfe0ff, 0x2a3d1e, 0.5));
@@ -455,24 +462,37 @@ function buildPlayerModel(p) {
 }
 function animatePlayer(p) {
   const m = p.model, sp = hyp(p.vx, p.vy);
-  const amp = Math.min(1, sp / 7.5), ph = p.phase, moving = sp > 0.3;
+  const amp = p.amp, run = clamp((sp - 2.2) / 4.5, 0, 1), ph = p.phase, idle = 1 - Math.min(1, amp * 3);
+  const t = performance.now() / 1000 + p.i * 1.7 + p.team * 0.9;
   m.root.position.copy(V(p.x, p.y, 0));
   m.root.rotation.y = Math.atan2(Math.cos(p.face), Math.sin(p.face));
-  m.body.rotation.set(0, 0, 0); m.body.position.set(0, 0, 0);
-  m.hips.rotation.set(0.06 + 0.2 * amp, 0, 0);
-  m.torso.rotation.set(0, Math.sin(ph) * 0.18 * amp, 0);
   const [L1, R1] = m.legs, [LA, RA] = m.arms;
-  const sL = Math.sin(ph), sR = -sL, stride = 0.25 + 0.75 * amp;
-  L1.hip.rotation.set(moving ? -sL * 0.85 * stride : 0, 0, 0);
-  R1.hip.rotation.set(moving ? -sR * 0.85 * stride : 0, 0, 0);
-  L1.kn.rotation.x = moving ? 0.15 + stride * (0.25 + 1.15 * Math.max(0, Math.cos(ph))) : 0.08;
-  R1.kn.rotation.x = moving ? 0.15 + stride * (0.25 + 1.15 * Math.max(0, -Math.cos(ph))) : 0.08;
-  L1.ft.rotation.x = -0.1; R1.ft.rotation.x = -0.1;
-  LA.sh.rotation.set(moving ? sL * 0.75 * stride : 0, 0, -0.12);
-  RA.sh.rotation.set(moving ? sR * 0.75 * stride : 0, 0, 0.12);
-  LA.el.rotation.x = -(0.35 + 0.9 * amp); RA.el.rotation.x = -(0.35 + 0.9 * amp);
-  m.body.position.y = moving ? Math.abs(Math.cos(ph)) * 0.06 * amp - 0.03 * amp : 0;
-  if (!moving) { m.torso.rotation.x = Math.sin(performance.now() / 600 + p.i * 1.3) * 0.02; LA.sh.rotation.z = -0.15; RA.sh.rotation.z = 0.15; }
+  const s = Math.sin(ph), g = Math.min(1, amp * 2.4);
+  // ноги: мах уперед/назад, коліно згинається у фазі переносу, стопа відштовхується носком
+  const A = (0.24 + 0.5 * run) * g, KN = (0.45 + 1.35 * run) * g;
+  [[L1, 0, -1], [R1, Math.PI, 1]].forEach(([leg, off, side]) => {
+    const sf = Math.sin(ph + off), cf = Math.cos(ph + off);
+    leg.hip.rotation.set(-sf * A - 0.1 * run * g, 0, side * (0.035 + 0.03 * idle));
+    leg.kn.rotation.x = 0.1 + 0.08 * idle + KN * Math.pow(Math.max(0, Math.cos(ph + off + 0.55)), 1.4) + 0.22 * g * Math.max(0, -cf);
+    leg.ft.rotation.x = -0.08 - 0.22 * g * Math.max(0, sf) * Math.max(0, -cf + 0.3) + 0.6 * g * Math.max(0, -sf) * Math.max(0, cf + 0.2);
+  });
+  // тулуб: таз повертається за ногою, плечі — назустріч, нахил при розгоні й у поворотах
+  const lean = 0.04 + 0.14 * run * amp + p.leanF * 0.22;
+  m.body.position.set(Math.sin(t * 0.9) * 0.02 * idle, 0, 0);
+  m.body.position.y = amp * (lerp(0.028 * (0.5 - Math.abs(s)), 0.05 * (Math.abs(s) - 0.5), run) - 0.025 * run);
+  m.body.rotation.set(0, 0, -p.leanS * 0.28 + Math.sin(t * 0.9) * 0.025 * idle);
+  m.hips.rotation.set(0.02, s * 0.12 * g, Math.cos(ph) * 0.05 * g + Math.sin(t * 0.9) * 0.03 * idle);
+  m.torso.rotation.set(lean + Math.sin(t * 2.1) * 0.012 * idle, -s * 0.3 * g, -Math.cos(ph) * 0.04 * g);
+  // голова тримається рівно і стежить за м'ячем
+  const ha = clamp(-angDiff(Math.atan2(ball.y - p.y, ball.x - p.x), p.face), -1.0, 1.0);
+  p.headY = lerp(p.headY, ha * (0.35 + 0.65 * idle), 0.12);
+  m.head.rotation.set(-lean * 0.7, p.headY, 0);
+  // руки: мах протилежно ногам, лікті сильніше зігнуті під час бігу
+  const AA = (0.22 + 0.62 * run) * g;
+  LA.sh.rotation.set(s * AA, 0, -(0.11 + 0.08 * run + 0.05 * idle));
+  RA.sh.rotation.set(-s * AA, 0, 0.11 + 0.08 * run + 0.05 * idle);
+  LA.el.rotation.x = -(0.25 + 0.15 * idle + 1.05 * run * g + 0.3 * run * Math.max(0, -s));
+  RA.el.rotation.x = -(0.25 + 0.15 * idle + 1.05 * run * g + 0.3 * run * Math.max(0, s));
   if (p.kickAnim > 0) {   // удар по м'ячу правою
     const k = 1 - p.kickAnim / 0.3;
     R1.hip.rotation.x = k < 0.4 ? lerp(0, 0.9, k / 0.4) : lerp(0.9, -1.3, (k - 0.4) / 0.6);
@@ -601,7 +621,7 @@ function makePlayers() {
   for (let t = 0; t < 2; t++) FORM.forEach((f, i) => {
     const p = {
       team: t, i, role: f.r, gk: f.r === 'GK', num: NUMS[i],
-      x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false,
+      x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false, amp: 0, leanF: 0, leanS: 0, headY: 0,
       kickCd: 0, stun: 0, slide: 0, dive: 0, diveDy: 0, tackleCd: 0, saveCd: 0, kickAnim: 0, touchAnim: 0, touchCd: 0, jump: 0, holdT: 0,
       jx: rand(-2, 2), jy: rand(-2, 2), jT: rand(2, 5), decT: 0, locked: false, pending: null, fallen: false, react: 0, read: 0,
       skin: SKINS[(Math.random() * SKINS.length) | 0], hair: HAIRS[(Math.random() * HAIRS.length) | 0],
@@ -681,7 +701,7 @@ function giveBall(p, cushion = true) {
   p.decT = isAI(p) ? D().react * rand(0.6, 1.2) : rand(0.15, 0.3);
   if (humanTeam === p.team && !p.gk) ctrl = p;
 }
-function canKick(p) { return (ball.owner === p && ball.held) || (ballDist(p) < 1.3 && ball.z < 0.9); }
+function canKick(p) { return (ball.owner === p && (ball.held || (ballDist(p) < 2.0 && ball.z < 0.9))) || (ballDist(p) < 1.3 && ball.z < 0.9); }
 function tryKick(p, fn) { if (canKick(p)) fn(); else p.pending = { fn, t: 0.5 }; }
 
 function kickBall(p, vx, vy, vz, spin = 0, top = 0) {
@@ -716,15 +736,18 @@ function passTo(p, t, forceLoft = false) {
   const d0 = hyp(t.x - ball.x, t.y - ball.y);
   let lane = 99;
   for (const o of players) if (o.team !== p.team) lane = Math.min(lane, distSeg(o.x, o.y, ball.x, ball.y, t.x, t.y));
-  const loft = forceLoft || d0 > 28 || (lane < 1.1 && d0 > 10);
+  const loft = forceLoft || d0 > 30 || (lane < 1.3 && d0 > 9);
+  // пас на хід: м'яч іде трохи попереду партнера і доходить до нього ще з запасом швидкості
+  const gs = (d) => clamp(groundSpeedFor(d * 1.5 + 4), 9, 30);
   let vz = 0, tt;
-  if (!loft) tt = d0 / (clamp(groundSpeedFor(d0 * 1.25 + 3), 7, 28) * 0.8);
+  if (!loft) tt = d0 / (gs(d0) * 0.8);
   else { vz = clamp(d0 * 0.2, 5, 11); tt = 2 * vz / G; }
-  const tx = t.x + t.vx * tt * 0.7, ty = t.y + t.vy * tt * 0.7;
+  const lead = Math.min(tt, 1.6) * 0.75;
+  const tx = clamp(t.x + t.vx * lead, 1, L - 1), ty = clamp(t.y + t.vy * lead, 1, W - 1);
   const d1 = hyp(tx - ball.x, ty - ball.y);
-  const speed = loft ? loftSpeedFor(d1 * 0.9, vz) : clamp(groundSpeedFor(d1 * 1.25 + 3), 7, 28);
+  const speed = loft ? loftSpeedFor(d1 * 0.92, vz) : gs(d1);
   kickTo(p, tx, ty, speed, vz);
-  passTarget = t;
+  passTarget = t; t.recvT = 0;
 }
 // Удар: aim −1..1 по ширині воріт, err — розкид, curl — закрут (м'яч летить дугою)
 function shootAt(p, power, aim, err, curl = 0) {
@@ -754,7 +777,7 @@ function bestPass(p, longOk) {
     for (const o of players) if (o.team !== p.team) { lane = Math.min(lane, distSeg(o.x, o.y, p.x, p.y, t.x, t.y)); open = Math.min(open, hyp(o.x - t.x, o.y - t.y)); }
     const [tlx] = toL(p.team, t.x, t.y);
     let s = (tlx - plx) * 0.13 + open * 0.28 + Math.min(lane, 4) * 0.3 - d * 0.025;
-    if (lane < 1.2 && d < 24) s -= 1.5;
+    if (lane < 2.0) s -= (2.0 - lane) * 1.4;   // суперник на лінії паса — ризиковано
     if (s > bs) { bs = s; best = { t, score: s }; }
   }
   return best;
@@ -762,7 +785,7 @@ function bestPass(p, longOk) {
 
 // ───────────────────────── Керування ─────────────────────────
 const keys = {}, pressed = {}, released = {};
-const touch = { dx: 0, dy: 0, shoot: false, sprint: false, passPress: false, shootPress: false, shootRelease: false };
+const touch = { dx: 0, dy: 0, far: false, shoot: false, sprint: false, passPress: false, shootPress: false, shootRelease: false };
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (!keys[e.code]) pressed[e.code] = true;
@@ -777,13 +800,13 @@ window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; }
 function readInput() {
   let dx = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0) + touch.dx;
   let dy = (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW ? 1 : 0) + touch.dy;
-  if (camMode === 2 && humanTeam >= 0) {   // камера за гравцем: «вгору» = вперед
+  if (camModeEff() === 2 && humanTeam >= 0) {   // камера за гравцем: «вгору» = вперед
     const dir = TEAMS[humanTeam].dir; const ndx = -dy * dir, ndy = dx * dir; dx = ndx; dy = ndy;
   }
   const m = hyp(dx, dy); if (m > 1) { dx /= m; dy /= m; }
   const inp = {
     dx, dy,
-    sprint: !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyL || touch.sprint),
+    sprint: !!(keys.ShiftLeft || keys.ShiftRight || keys.KeyL || touch.sprint || touch.far),
     passPress: !!(pressed.Space || pressed.KeyJ || pressed.KeyZ || touch.passPress),
     shootPress: !!(pressed.KeyK || pressed.KeyX || touch.shootPress),
     shootDown: !!(keys.KeyK || keys.KeyX || touch.shoot),
@@ -808,6 +831,7 @@ function humanControl(dt) {
   if (p.locked || state === 'kickoff' || (state === 'setpiece' && setpiece && setpiece.taker === p)) sp = 0;
   p.tvx = inp.dx * sp; p.tvy = inp.dy * sp; p.sprint = inp.sprint && hyp(inp.dx, inp.dy) > 0.3;
   if (p.pending && !inp.dx && !inp.dy) moveTo(p, ball.x, ball.y, 6.6, 0.4);   // підбігти до м'яча для удару
+  if (passTarget === p && !ball.owner && !inp.dx && !inp.dy && state === 'play') aiReceive(p);   // партнер сам іде назустріч пасу
   if (state !== 'play') { charge = 0; charging = false; return; }
   if (ball.owner === p) {
     if (inp.passPress) { tryKick(p, () => humanPass(p, inp, false)); return; }
@@ -825,7 +849,7 @@ function humanControl(dt) {
     if (autoSwT <= 0 && (!ball.owner || ball.owner.team !== humanTeam)) {
       autoSwT = 0.4;
       const c = closestToBall(humanTeam);
-      if (c && c !== p && ballDist(p) > ballDist(c) + 7) ctrl = c;
+      if (c && c !== p && passTarget !== p && ballDist(p) > ballDist(c) + 4.5) ctrl = c;
     }
   }
 }
@@ -837,10 +861,13 @@ function humanPass(p, inp, loft) {
   for (const t of players) {
     if (t.team !== p.team || t === p) continue;
     const dx = t.x - p.x, dy = t.y - p.y, d = hyp(dx, dy);
-    if (d < 2) continue;
+    if (d < 2.5 || d > 50) continue;
     const c = (dx * ax + dy * ay) / d;
-    if (c < 0.35) continue;
-    const s = c * 3 - d * 0.035 - (t.gk ? 1.5 : 0);
+    if (c < -0.2) continue;
+    let lane = 99, open = 9;
+    for (const o of players) if (o.team !== p.team) { lane = Math.min(lane, distSeg(o.x, o.y, p.x, p.y, t.x, t.y)); open = Math.min(open, hyp(o.x - t.x, o.y - t.y)); }
+    // головне — напрямок, куди вказали; далі — вільна лінія передачі й відкритість партнера
+    const s = c * 4 - d * 0.03 - (t.gk ? 2.5 : 0) - Math.max(0, 1.6 - lane) * 1.2 + Math.min(open, 6) * 0.08;
     if (s > bs) { bs = s; best = t; }
   }
   if (!best) { kickTo(p, p.x + ax * 15, p.y + ay * 15, loft ? loftSpeedFor(14, 6) : groundSpeedFor(20), loft ? 6 : 0); return; }
@@ -931,7 +958,7 @@ function aiChase(p) {
 }
 function aiReceive(p) {
   const sp = hyp(ball.vx, ball.vy);
-  if (sp < 3) { moveTo(p, ball.x, ball.y, 7 * spdMul(p), 0.5); return; }
+  if (sp < 3 || ballDist(p) < 3.5) { moveTo(p, ball.x, ball.y, 7 * spdMul(p), 0.5); return; }
   const t = clamp(((p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy) / (sp * sp), 0, 2);
   moveTo(p, ball.x + ball.vx * t * 0.85, ball.y + ball.vy * t * 0.85, 7 * spdMul(p), 0.8);
 }
@@ -1044,31 +1071,37 @@ function movePlayers(dt) {
     // власник м'яча, який відкотився, спершу біжить до м'яча, щоб зробити наступний дотик
     if (ball.owner === p && !ball.held && !ball.protected) {
       const bx = ball.x - p.x, by = ball.y - p.y, bd = hyp(bx, by), ts = hyp(tvx, tvy);
-      if (bd > 0.75 && ts > 0.5) {
-        const w = clamp((bd - 0.75) / 0.8, 0, 0.75);
+      if (bd > 1.9 && ts > 0.5) {
+        const w = clamp((bd - 1.9) / 0.8, 0, 0.6);
         let nx = lerp(tvx / ts, bx / bd, w), ny = lerp(tvy / ts, by / bd, w); const nm = hyp(nx, ny) || 1;
         tvx = nx / nm * ts; tvy = ny / nm * ts;
       }
     }
     // інерція: обмежене прискорення, гальмування сильніше, на швидкості важче різко повертати
-    let acc = 7.5;
+    let acc = p === ctrl ? 17 : 11;   // гравець, яким керуєте, відгукується швидше
     if (p.stun > 0) { tvx = 0; tvy = 0; acc = p.slide > 0 ? 6 : 10; }
     if (p.dive > 0) { acc = 22; tvx = 0; tvy = p.diveDy * 6.5; }
     const sp = hyp(p.vx, p.vy), tsp = hyp(tvx, tvy);
-    if (tsp < sp) acc = Math.max(acc, 10);
-    if (sp > 5 && tsp > 0.1 && Math.abs(angDiff(Math.atan2(tvy, tvx), Math.atan2(p.vy, p.vx))) > 1.2) acc *= 0.75;
+    if (tsp < sp) acc = Math.max(acc, 14);
+    if (sp > 6 && tsp > 0.1 && Math.abs(angDiff(Math.atan2(tvy, tvx), Math.atan2(p.vy, p.vx))) > 1.4) acc *= 0.85;
     let dvx = tvx - p.vx, dvy = tvy - p.vy; const dv = hyp(dvx, dvy), lim = acc * dt;
     if (dv > lim) { dvx *= lim / dv; dvy *= lim / dv; }
     p.vx += dvx; p.vy += dvy;
+    {   // для анімації: нахил при розгоні та в поворотах
+      const fx = Math.cos(p.face), fy = Math.sin(p.face), kk = Math.min(1, dt * 7);
+      p.leanF += (clamp((dvx * fx + dvy * fy) / dt / 14, -1, 1) - p.leanF) * kk;
+      p.leanS += (clamp((dvx * fy - dvy * fx) / dt / 14, -1, 1) * Math.min(1, sp / 5) - p.leanS) * kk;
+    }
     p.x += p.vx * dt; p.y += p.vy * dt;
     const nsp = hyp(p.vx, p.vy);
     if (p.stun <= 0 && p.dive <= 0) {
       let tf = null;
       if (nsp > 0.5) tf = Math.atan2(p.vy, p.vx);
       else if (ball.owner !== p && p !== ctrl) tf = Math.atan2(ball.y - p.y, ball.x - p.x);
-      if (tf !== null) p.face += angDiff(tf, p.face) * Math.min(1, dt * (nsp > 6 ? 6 : 10));
+      if (tf !== null) p.face += angDiff(tf, p.face) * Math.min(1, dt * (nsp > 6 ? 11 : 14));
     }
-    p.phase += nsp * dt * 1.75;
+    p.amp += (Math.min(1, nsp / 7.5) - p.amp) * Math.min(1, dt * 8);
+    if (nsp > 0.25) p.phase += (4.6 + nsp * 0.68) * dt;   // темп кроків: ходьба ~1.7, спринт ~3 кроки/с
     p.x = clamp(p.x, -4.5, L + 4.5); p.y = clamp(p.y, -4.5, W + 4.5);
   }
   for (let i = 0; i < players.length; i++) for (let j = i + 1; j < players.length; j++) {
@@ -1079,33 +1112,27 @@ function movePlayers(dt) {
 }
 
 // ───────────────────────── Фізика м'яча ─────────────────────────
-// Дриблінг: м'яч не «приклеєний» — гравець підштовхує його дотиками, між ними м'яч котиться сам
+// Дриблінг: м'яч котиться перед гравцем у напрямку бігу; м'яко «тягнеться» до точки перед ногою
 function dribble(o, dt) {
   const b = ball;
-  const sp = hyp(o.vx, o.vy), fx = Math.cos(o.face), fy = Math.sin(o.face);
-  const lead = 0.5 + sp * 0.07;
+  const sp = hyp(o.vx, o.vy);
+  let fx, fy;
+  if (sp > 0.8) { fx = o.vx / sp; fy = o.vy / sp; } else { fx = Math.cos(o.face); fy = Math.sin(o.face); }
+  const lead = 0.55 + (o.sprint ? 0.42 : 0.1) + sp * 0.03;
   const tx = o.x + fx * lead, ty = o.y + fy * lead;
-  const dx = b.x - o.x, dy = b.y - o.y, d = hyp(dx, dy);
+  const d = hyp(b.x - o.x, b.y - o.y);
   o.touchCd -= dt;
   if (b.protected) { b.x = lerp(b.x, tx, 0.3); b.y = lerp(b.y, ty, 0.3); b.vx = b.vy = 0; return; }
-  if (d > 3.2 || b.z > 1.4) { b.owner = null; return; }   // м'яч утік — тепер він нічий
-  if (b.z < 0.35 && d < 1.0 + sp * 0.04 && o.touchCd <= 0 && o.stun <= 0) {
-    const ahead = dx * fx + dy * fy, relv = (b.vx - o.vx) * fx + (b.vy - o.vy) * fy;
-    const side = Math.abs(b.vx * fy - b.vy * fx);   // м'яч котиться не туди, куди біжить гравець
-    if (ahead < lead * 0.85 || relv < -0.4 || hyp(b.x - tx, b.y - ty) > 0.45 || sp < 0.6 || side > 1.2) {
-      // м'яч отримує швидкість гравця плюс невелику поправку до точки перед ногою;
-      // на прискоренні дотик довший — м'яч відкочується далі й його легше відібрати
-      const extra = sp > 0.6 ? (o.sprint ? 1.0 : 0.45) : 0;
-      let nvx = o.vx + fx * extra + clamp((tx - b.x) * 2, -1.5, 1.5);
-      let nvy = o.vy + fy * extra + clamp((ty - b.y) * 2, -1.5, 1.5);
-      const nv = hyp(nvx, nvy), cap = sp + extra + 0.3;
-      if (nv > cap) { nvx *= cap / nv; nvy *= cap / nv; }
-      b.vx = nvx; b.vy = nvy;
-      b.vz = 0; b.spin = 0; b.top = 0;
-      o.touchCd = sp > 0.6 ? clamp(0.42 - sp * 0.02, 0.22, 0.42) : 0.08;
-      if (sp > 0.6) o.touchAnim = 0.18;
-    }
-  }
+  if (d > 3.0 || b.z > 1.4) { b.owner = null; return; }   // м'яч утік — тепер він нічий
+  if (o.stun > 0 || b.z > 0.45) return;
+  // бажана швидкість м'яча: швидкість гравця + поправка до точки перед ним
+  const k = o.sprint ? 5.5 : 9;
+  const wx = o.vx + clamp((tx - b.x) * k * 0.65, -5, 5), wy = o.vy + clamp((ty - b.y) * k * 0.65, -5, 5);
+  const bl = 1 - Math.exp(-k * dt);
+  b.vx += (wx - b.vx) * bl; b.vy += (wy - b.vy) * bl;
+  if (b.z < 0.05) b.vz = 0;
+  b.spin *= 0.8; b.top = 0;
+  if (o.touchCd <= 0 && sp > 1.2) { o.touchAnim = 0.18; o.touchCd = clamp(0.55 - sp * 0.03, 0.28, 0.55); }
 }
 function postHit(v, bar) { if (v > 3) { Sound.clang(); if (state === 'play' && !demo) showBanner(bar ? 'ПОПЕРЕЧИНА!' : 'ШТАНГА!', '', 1.0); } }
 function collidePosts(b) {
@@ -1370,20 +1397,22 @@ function updateCamera(dt, now) {
     const a = now / 14000;
     look.set(Math.sin(a * 0.7) * 12, 0, 0);
     pos = new T3.Vector3(Math.sin(a) * 48, 24 + Math.sin(a * 0.5) * 5, Math.cos(a) * 38);
-  } else if (camMode === 2 && humanTeam >= 0) {
-    const dir = TEAMS[humanTeam].dir;
-    look.copy(V(ball.x + dir * 8, ball.y, 0));
-    pos = V(ball.x - dir * 14, ball.y, 7.5);
+  } else if (camModeEff() === 2 && humanTeam >= 0) {
+    const dir = TEAMS[humanTeam].dir, pt = isPortrait();
+    look.copy(V(ball.x + dir * (pt ? 5 : 8), ball.y, 0));
+    pos = V(ball.x - dir * (pt ? 12.5 : 14), ball.y, pt ? 9.5 : 7.5);
   } else {
-    const near = camMode === 1;   // 0 — ближня трансляція, 1 — широкий план
-    look.x = clamp(look.x, -L / 2 + (near ? 12 : 2), L / 2 - (near ? 12 : 2));
+    const wide = camMode === 1;   // 0 — ближня трансляція, 1 — широкий план
+    look.x = clamp(look.x, -L / 2 + (wide ? 12 : 2), L / 2 - (wide ? 12 : 2));
     look.z = clamp(look.z, -W / 2 + 4, W / 2 - 4);
-    pos = near ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, 9, Math.min(W / 2 + 7, look.z + 19));
+    const back = isMobile ? 15 : 19, hgt = isMobile ? 7.8 : 9;   // на телефоні камера ближче — гравці більші
+    pos = wide ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, hgt, Math.min(W / 2 + 7, look.z + back));
   }
   const k = Math.min(1, dt * (demo ? 1 : 3.2));
   camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : 2.5)));
   camera.position.copy(camP); camera.lookAt(camT);
-  camera.fov = lerp(camera.fov, demo ? 40 : camMode === 1 ? 38 : 34, k); camera.updateProjectionMatrix();
+  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : 34;
+  camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix();
   sun.position.copy(camT).add(new T3.Vector3(-26, 60, -32)); sun.target.position.copy(camT); sun.target.updateMatrixWorld();
 }
 
@@ -1470,8 +1499,18 @@ document.querySelectorAll('.choices').forEach((group) => {
     settings[group.dataset.opt] = group.dataset.opt === 'mins' ? +b.dataset.v : b.dataset.v;
   });
 });
+function canFullscreen() { const d = document.documentElement; return !!(d.requestFullscreen || d.webkitRequestFullscreen); }
+function goFullscreen() {   // на телефоні гра відкривається на весь екран і горизонтально
+  const d = document.documentElement;
+  try {
+    const r = d.requestFullscreen ? d.requestFullscreen({ navigationUI: 'hide' }) : d.webkitRequestFullscreen && d.webkitRequestFullscreen();
+    if (r && r.then) r.then(() => { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); }).catch(() => {});
+  } catch (e) { /* браузер не дозволив — граємо як є */ }
+}
+function exitFullscreen() { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* ок */ } }
 function play() {
   Sound.init();
+  if (isMobile && !document.fullscreenElement) goFullscreen();
   ['menu', 'end', 'pause'].forEach((id) => $(id).classList.add('hidden'));
   $('hud').classList.remove('hidden');
   if (isMobile || 'ontouchstart' in window) $('touch').classList.remove('hidden');
@@ -1493,29 +1532,46 @@ function togglePause() {
 $('play').onclick = play; $('again').onclick = play;
 $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause;
 
-(() => {   // сенсорне керування
-  const stick = $('stick'), knob = $('knob');
+(() => {   // сенсорне керування: джойстик з'являється там, де торкнувся палець (ліва половина екрана)
+  const zone = $('stickZone'), stick = $('stick'), knob = $('knob');
+  const R = 60;
   let id = null, cx = 0, cy = 0;
+  const place = (x, y) => { stick.style.left = (x - 75) + 'px'; stick.style.top = (y - 75) + 'px'; stick.style.bottom = 'auto'; };
   const mv = (e) => {
     if (e.pointerId !== id) return;
-    let dx = (e.clientX - cx) / 55, dy = (e.clientY - cy) / 55; const m = hyp(dx, dy); if (m > 1) { dx /= m; dy /= m; }
-    touch.dx = Math.abs(dx) > 0.15 ? dx : 0; touch.dy = Math.abs(dy) > 0.15 ? dy : 0;
-    knob.style.transform = `translate(${dx * 45}px, ${dy * 45}px)`;
+    let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R; const m = hyp(dx, dy);
+    touch.far = m > 1.15;   // палець за межею кола — прискорення
+    if (m > 1) { dx /= m; dy /= m; }
+    const dm = hyp(dx, dy);
+    if (dm < 0.12) { touch.dx = touch.dy = 0; } else { touch.dx = dx; touch.dy = dy; }
+    knob.style.transform = `translate(${dx * 48}px, ${dy * 48}px)`;
   };
-  stick.addEventListener('pointerdown', (e) => { id = e.pointerId; const r = stick.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; stick.setPointerCapture(id); mv(e); });
-  stick.addEventListener('pointermove', mv);
-  const up = (e) => { if (e.pointerId !== id) return; id = null; touch.dx = touch.dy = 0; knob.style.transform = ''; };
-  stick.addEventListener('pointerup', up); stick.addEventListener('pointercancel', up);
+  zone.addEventListener('pointerdown', (e) => {
+    if (id !== null) return;
+    e.preventDefault(); id = e.pointerId; cx = e.clientX; cy = e.clientY;
+    place(cx, cy); stick.classList.add('on');
+    try { zone.setPointerCapture(id); } catch (err) { /* ок */ }
+    mv(e);
+  });
+  zone.addEventListener('pointermove', mv);
+  const up = (e) => {
+    if (e.pointerId !== id) return;
+    id = null; touch.dx = touch.dy = 0; touch.far = false; knob.style.transform = ''; stick.classList.remove('on');
+    stick.style.left = ''; stick.style.top = ''; stick.style.bottom = '';
+  };
+  zone.addEventListener('pointerup', up); zone.addEventListener('pointercancel', up);
   const btn = (el, down, upf) => {
-    el.addEventListener('pointerdown', (e) => { e.preventDefault(); down(); });
-    el.addEventListener('pointerup', (e) => { e.preventDefault(); upf(); });
-    el.addEventListener('pointerleave', () => upf());
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.classList.add('down'); down(); });
+    const u = (e) => { e.preventDefault(); el.classList.remove('down'); upf(); };
+    el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u); el.addEventListener('pointerleave', u);
   };
   btn($('tPass'), () => (touch.passPress = true), () => {});
   btn($('tShoot'), () => { touch.shoot = true; touch.shootPress = true; }, () => { if (touch.shoot) { touch.shoot = false; touch.shootRelease = true; } });
   btn($('tSprint'), () => (touch.sprint = true), () => (touch.sprint = false));
+  const full = $('tFull');
+  if (!canFullscreen()) full.classList.add('hidden');
+  full.onclick = () => (document.fullscreenElement || document.webkitFullscreenElement ? exitFullscreen() : goFullscreen());
 })();
-
 buildPitch(); buildStadium(); buildBoards(); buildGoals(); buildBall();
 startMatch(true);
 $('loading').classList.add('hidden');
@@ -1523,7 +1579,7 @@ requestAnimationFrame(frame);
 
 window.GOLEADOR = {
   get state() { return state; }, get score() { return score; }, get ball() { return ball; }, get players() { return players; },
-  get ctrl() { return ctrl; }, get clock() { return clock; }, step, startMatch, play, settings, STATS, shootAt,
+  get ctrl() { return ctrl; }, get clock() { return clock; }, get passTarget() { return passTarget; }, step, startMatch, play, settings, STATS, shootAt,
   setCam(m) { camMode = m; }, camera, render: () => { for (const p of players) animatePlayer(p); renderer.render(scene, camera); },
 };
 })();

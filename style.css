@@ -1,6 +1,6 @@
 * { box-sizing: border-box; }
 html, body {
-  margin: 0; height: 100%; overflow: hidden; background: #07090d;
+  margin: 0; height: 100%; height: 100dvh; width: 100%; position: fixed; inset: 0; overflow: hidden; background: #07090d;
   font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: #fff; user-select: none; -webkit-user-select: none; touch-action: none;
 }
@@ -82,23 +82,27 @@ button.ghost {
 
 /* touch controls */
 #touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#stickZone { position: absolute; left: 0; top: 70px; bottom: 0; width: 48%; pointer-events: auto; touch-action: none; }
 #stick {
-  position: absolute; left: 4vw; bottom: 6vh; width: 150px; height: 150px; border-radius: 50%;
-  background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.18); pointer-events: auto;
+  position: absolute; left: calc(4vw + env(safe-area-inset-left)); bottom: 7vh; width: 150px; height: 150px; border-radius: 50%;
+  background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.16); pointer-events: none; opacity: .55; transition: opacity .15s;
 }
+#stick.on { opacity: 1; background: rgba(255,255,255,.1); transition: none; }
 #knob {
   position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
-  background: rgba(255,255,255,.35); box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  background: rgba(255,255,255,.38); box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
-#btns { position: absolute; right: 4vw; bottom: 6vh; display: flex; gap: 14px; align-items: flex-end; pointer-events: auto; }
-#btns button, #tPause {
+#btns { position: absolute; right: calc(4vw + env(safe-area-inset-right)); bottom: 6vh; display: flex; gap: 14px; align-items: flex-end; pointer-events: auto; }
+#btns button, #tPause, #tFull { touch-action: none;
   border: 2px solid rgba(255,255,255,.25); color: #fff; font: inherit; font-weight: 900; border-radius: 50%;
   background: rgba(15,20,30,.55); backdrop-filter: blur(2px);
 }
 #tSprint { width: 64px; height: 64px; font-size: 24px; }
 #tPass { width: 84px; height: 84px; font-size: 16px; background: rgba(40,140,255,.45) !important; }
 #tShoot { width: 100px; height: 100px; font-size: 18px; margin-bottom: 30px; background: rgba(230,50,60,.5) !important; }
-#tPause { position: absolute; top: 14px; right: 14px; width: 46px; height: 46px; pointer-events: auto; font-size: 14px; }
+#btns button.down { transform: scale(.92); filter: brightness(1.35); }
+#tPause { position: absolute; top: 14px; right: calc(14px + env(safe-area-inset-right)); width: 46px; height: 46px; pointer-events: auto; font-size: 14px; }
+#tFull { position: absolute; top: 14px; right: calc(70px + env(safe-area-inset-right)); width: 46px; height: 46px; pointer-events: auto; font-size: 20px; }
 
 @media (max-height: 500px) {
   .panel { padding: 14px 20px 12px; }
@@ -114,4 +118,17 @@ button.ghost {
   #board { transform: scale(.8); transform-origin: left top; left: 10px; top: 8px; }
   #banner { top: 22%; }
   #banner .b-main { font-size: 22px; }
+}
+/* телефон вертикально */
+@media (orientation: portrait) and (pointer: coarse) {
+  #board { transform: scale(.72); transform-origin: left top; left: 8px; top: calc(8px + env(safe-area-inset-top)); }
+  #minimap { left: auto; right: 8px; top: calc(60px + env(safe-area-inset-top)); bottom: auto; transform: none; width: 100px; height: 66px; }
+  #tPause, #tFull { width: 40px; height: 40px; top: calc(8px + env(safe-area-inset-top)); }
+  #tPause { right: 8px; } #tFull { right: 56px; }
+  #btns { gap: 8px; right: 3vw; bottom: calc(3vh + env(safe-area-inset-bottom)); }
+  #tSprint { width: 56px; height: 56px; }
+  #tPass { width: 74px; height: 74px; }
+  #tShoot { width: 86px; height: 86px; margin-bottom: 26px; }
+  #stickZone { width: 52%; top: 140px; }
+  #stick { left: 6vw; bottom: 5vh; }
 }

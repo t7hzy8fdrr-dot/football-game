@@ -2,7 +2,11 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07090d">
 <title>ГОЛЕАДОР — футбол у браузері</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -77,6 +81,7 @@
 </div>
 
 <div id="touch" class="hidden">
+  <div id="stickZone"></div>
   <div id="stick"><div id="knob"></div></div>
   <div id="btns">
     <button id="tSprint">⚡</button>
@@ -84,6 +89,7 @@
     <button id="tShoot">УДАР</button>
   </div>
   <button id="tPause">❚❚</button>
+  <button id="tFull" title="На весь екран">⛶</button>
 </div>
 
 <script src="lib/three.min.js"></script>
