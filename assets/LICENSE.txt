@@ -1,0 +1,4 @@
+Моделі гравців, зачіски та анімації:
+  «Universal Base Characters» і «Universal Animation Library» від Quaternius (https://quaternius.com)
+  Ліцензія CC0 1.0 (суспільне надбання): https://creativecommons.org/publicdomain/zero/1.0/
+Файли підготовлено скриптами з папки tools/ (зменшені текстури, лише потрібні анімації).

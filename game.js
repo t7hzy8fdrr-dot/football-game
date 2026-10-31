@@ -8,7 +8,7 @@ const GOAL_W = 7.32, GOAL_H = 2.44, GOAL_D = 2.0, POST_R = 0.06;
 const PT = W / 2 - GOAL_W / 2, PB = W / 2 + GOAL_W / 2;
 const G = 9.81, DT = 1 / 60;
 const BALL_R = 0.11;                           // фізичний радіус
-const BALL_VIS = 1.45;                         // м'яч трохи більший візуально, щоб його було видно
+const BALL_VIS = window.matchMedia('(pointer: coarse)').matches ? 1.75 : 1.45;                         // м'яч трохи більший візуально, щоб його було видно
 const AIR_K = 0.0125;                          // опір повітря (на метр)
 const MAGNUS = 0.0042;                         // ефект Магнуса (закрут)
 const ROLL_A = 0.42, ROLL_C = 0.75;            // тертя кочення по траві
@@ -462,7 +462,8 @@ function buildPlayerModel(p) {
   scene.add(root);
   return { root, body, hips, torso, head, arms, legs };
 }
-function animatePlayer(p) {
+function animatePlayer(p, dt = 0) {
+  if (p.model.human) { animateHuman(p, dt); return; }
   const m = p.model, sp = hyp(p.vx, p.vy);
   const amp = p.amp, run = clamp((sp - 2.2) / 4.5, 0, 1), ph = p.phase, idle = 1 - Math.min(1, amp * 3);
   const t = performance.now() / 1000 + p.i * 1.7 + p.team * 0.9;
@@ -471,10 +472,13 @@ function animatePlayer(p) {
   const [L1, R1] = m.legs, [LA, RA] = m.arms;
   const s = Math.sin(ph), g = Math.min(1, amp * 2.4);
   // ноги: мах уперед/назад, коліно згинається у фазі переносу, стопа відштовхується носком
+  // напрямок руху відносно корпусу: уперед, спиною чи боком
+  const fx = Math.cos(p.face), fy = Math.sin(p.face);
+  const fl = sp > 0.3 ? (p.vx * fx + p.vy * fy) / sp : 1, sl = sp > 0.3 ? (p.vx * fy - p.vy * fx) / sp : 0;
   const A = (0.24 + 0.5 * run) * g, KN = (0.45 + 1.35 * run) * g;
   [[L1, 0, -1], [R1, Math.PI, 1]].forEach(([leg, off, side]) => {
     const sf = Math.sin(ph + off), cf = Math.cos(ph + off);
-    leg.hip.rotation.set(-sf * A - 0.1 * run * g, 0, side * (0.035 + 0.03 * idle));
+    leg.hip.rotation.set(-sf * A * fl - 0.1 * run * g * Math.max(0, fl), 0, side * (0.035 + 0.03 * idle) + sl * sf * A * 0.8);
     leg.kn.rotation.x = 0.1 + 0.08 * idle + KN * Math.pow(Math.max(0, Math.cos(ph + off + 0.55)), 1.4) + 0.22 * g * Math.max(0, -cf);
     leg.ft.rotation.x = -0.08 - 0.22 * g * Math.max(0, sf) * Math.max(0, -cf + 0.3) + 0.6 * g * Math.max(0, -sf) * Math.max(0, cf + 0.2);
   });
@@ -484,13 +488,13 @@ function animatePlayer(p) {
   m.body.position.y = amp * (lerp(0.028 * (0.5 - Math.abs(s)), 0.05 * (Math.abs(s) - 0.5), run) - 0.025 * run);
   m.body.rotation.set(0, 0, -p.leanS * 0.28 + Math.sin(t * 0.9) * 0.025 * idle);
   m.hips.rotation.set(0.02, s * 0.12 * g, Math.cos(ph) * 0.05 * g + Math.sin(t * 0.9) * 0.03 * idle);
-  m.torso.rotation.set(lean + Math.sin(t * 2.1) * 0.012 * idle, -s * 0.3 * g, -Math.cos(ph) * 0.04 * g);
+  m.torso.rotation.set(lean + Math.sin(t * 2.1) * 0.012 * idle, -s * 0.3 * g * fl, -Math.cos(ph) * 0.04 * g);
   // голова тримається рівно і стежить за м'ячем
   const ha = clamp(-angDiff(Math.atan2(ball.y - p.y, ball.x - p.x), p.face), -1.0, 1.0);
   p.headY = lerp(p.headY, ha * (0.35 + 0.65 * idle), 0.12);
   m.head.rotation.set(-lean * 0.7, p.headY, 0);
   // руки: мах протилежно ногам, лікті сильніше зігнуті під час бігу
-  const AA = (0.22 + 0.62 * run) * g;
+  const AA = (0.22 + 0.62 * run) * g * Math.max(0.35, Math.abs(fl));
   LA.sh.rotation.set(s * AA, 0, -(0.11 + 0.08 * run + 0.05 * idle));
   RA.sh.rotation.set(-s * AA, 0, 0.11 + 0.08 * run + 0.05 * idle);
   LA.el.rotation.x = -(0.25 + 0.15 * idle + 1.05 * run * g + 0.3 * run * Math.max(0, -s));
@@ -529,6 +533,219 @@ function animatePlayer(p) {
     LA.sh.rotation.set(-2.7, 0, -0.5); RA.sh.rotation.set(-2.7, 0, 0.5); LA.el.rotation.x = -0.2; RA.el.rotation.x = -0.2;
   }
   if (ball.owner === p && ball.held) { LA.sh.rotation.set(-1.2, 0, 0.25); RA.sh.rotation.set(-1.2, 0, -0.25); LA.el.rotation.x = -0.9; RA.el.rotation.x = -0.9; }
+}
+
+// ───────────────────────── Реалістичні гравці ─────────────────────────
+// 3D-модель людини зі скелетом і анімаціями (Quaternius, ліцензія CC0), форма команд малюється шейдером
+let HUMAN = null;
+const LOCO = [['idle', 'Idle_Loop', 0], ['walk', 'Walk_Loop', 1.45], ['jog', 'Jog_Fwd_Loop', 3.6], ['sprint', 'Sprint_Loop', 6.6]];
+const EXTRA = [['jump', 'Jump_Loop'], ['fall', 'Death01'], ['dance', 'Dance_Loop'], ['crouch', 'Crouch_Idle_Loop']];
+function loadHumans() {
+  if (!T3.GLTFLoader) return Promise.resolve(null);
+  const gl = new T3.GLTFLoader(), tl = new T3.TextureLoader();
+  return Promise.all([gl.loadAsync('assets/player.glb'), gl.loadAsync('assets/anims.glb'), gl.loadAsync('assets/hair.glb'), tl.loadAsync('assets/skin_light.jpg')])
+    .then(([pl, an, hr, light]) => {
+      let body = null, brows = null;
+      pl.scene.traverse((o) => { if (o.isSkinnedMesh && o.name === 'SuperHero_Male') body = o; if (o.isSkinnedMesh && o.name === 'Eyebrows') brows = o; });
+      computeKit(body);
+      light.encoding = T3.sRGBEncoding; light.flipY = false; light.anisotropy = maxAniso;
+      const dark = body.material.map; dark.anisotropy = maxAniso;
+      const clips = {}; for (const c of an.animations) clips[c.name] = c;
+      const hair = {}; hr.scene.traverse((o) => { if (o.isMesh) hair[o.name] = o; });
+      HUMAN = { scene: pl.scene, bodyMat: body.material, browMat: brows && brows.material, dark, light, clips, hair };
+      return HUMAN;
+    })
+    .catch((e) => { console.warn('Моделі гравців не завантажились, використовую прості', e); return null; });
+}
+// Для кожної вершини: яка частина форми її вкриває (футболка, шорти, гетри, бутси) — за висотою і кісткою в Т-позі
+function computeKit(mesh) {
+  const g = mesh.geometry, sk = mesh.skeleton, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const names = sk.bones.map((b) => b.name);
+  const kit = new Float32Array(pos.count * 4), v = new T3.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    let bi = si.getX(i), bw = sw.getX(i);
+    if (sw.getY(i) > bw) { bw = sw.getY(i); bi = si.getY(i); }
+    if (sw.getZ(i) > bw) { bw = sw.getZ(i); bi = si.getZ(i); }
+    if (sw.getW(i) > bw) { bw = sw.getW(i); bi = si.getW(i); }
+    const n = names[bi] || '', ax = Math.abs(v.x);
+    let r = -1;
+    if (/upperarm|lowerarm|hand|index|middle|pinky|ring|thumb/.test(n)) { if (ax < 0.4 && v.y > 1.3) r = 0; }     // короткий рукав
+    else if (/neck|Head/.test(n)) r = -1;
+    else if (v.y > 0.985 && v.y < 1.53) r = 0;          // футболка
+    else if (v.y > 0.67 && v.y <= 0.985) r = 1;         // шорти
+    else if (v.y > 0.105 && v.y < 0.475) r = 2;         // гетри
+    else if (v.y <= 0.105) r = 3;                        // бутси
+    if (r >= 0) kit[i * 4 + r] = 1;
+  }
+  g.setAttribute('kit', new T3.BufferAttribute(kit, 4));
+}
+const kitNumCache = {};
+function kitNumTex(n, color) {
+  const k = n + color; if (kitNumCache[k]) return kitNumCache[k];
+  return (kitNumCache[k] = canvasTex(128, 128, (g) => {
+    g.clearRect(0, 0, 128, 128);
+    g.font = '900 112px Arial Black, Segoe UI, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = color; g.fillText(n, 64, 68);
+  }));
+}
+function kitMaterial(p) {
+  const T = TEAMS[p.team], m = HUMAN.bodyMat.clone();
+  m.map = p.skinLight ? HUMAN.light : HUMAN.dark;
+  m.roughness = 0.62; m.metalness = 0;
+  m.color.set(p.skinTint);
+  const col = (c) => ({ value: new T3.Color(c) });
+  const u = {
+    uShirt: col(p.gk ? T.gk : T.shirt), uShorts: col(p.gk ? 0x1d1d1d : T.shorts), uSocks: col(p.gk ? 0x1d1d1d : T.socks), uBoots: col(p.boot),
+    uNum: { value: kitNumTex(p.num, p.gk ? '#ffffff' : T.num) },
+  };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'attribute vec4 kit;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+      '#include <begin_vertex>\nvKit = kit; vBind = position; vBindN = normal;\ntransformed += normal * (0.02 * kit.x + 0.028 * kit.y + 0.005 * kit.z + 0.009 * kit.w);');
+    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float km = clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0);
+        vec3 kc = (uShirt * vKit.x + uShorts * vKit.y + uSocks * vKit.z + uBoots * vKit.w) / max(km, 0.001);
+        float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        vec3 fab = kc * (0.93 + 0.12 * (lum - 0.45));
+        if (vBindN.z < -0.2 && vKit.x > 0.5) {   // номер на спині
+          vec2 nuv = vec2((0.15 - vBind.x) / 0.30, (vBind.y - 1.10) / 0.30);
+          if (nuv.x > 0.0 && nuv.x < 1.0 && nuv.y > 0.0 && nuv.y < 1.0) { vec4 nc = texture2D(uNum, nuv); fab = mix(fab, nc.rgb, nc.a); }
+        }
+        diffuseColor.rgb = mix(diffuseColor.rgb, fab, km);`)
+      .replace('#include <normal_fragment_maps>', T3.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', 'mapN.xy *= normalScale * (1.0 - 0.7 * clamp(vKit.x + vKit.y, 0.0, 1.0));'))
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, vKit.w > 0.5 ? 0.35 : 0.8, clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0));');
+  };
+  m.customProgramCacheKey = () => 'kit-v1';
+  return m;
+}
+const hairMatCache = {};
+function hairMat(src, color) {
+  const k = src.uuid + color; if (hairMatCache[k]) return hairMatCache[k];
+  const m = src.clone(); m.color.set(color); m.roughness = 0.75;
+  return (hairMatCache[k] = m);
+}
+const _q1 = new T3.Quaternion(), _q2 = new T3.Quaternion(), _v1 = new T3.Vector3();
+const AX_X = new T3.Vector3(1, 0, 0), AX_Y = new T3.Vector3(0, 1, 0), AX_Z = new T3.Vector3(0, 0, 1);
+// повернути кістку навколо осі, заданої в системі координат моделі (а не самої кістки)
+function boneRot(bone, axis, ang, model) {
+  if (!ang) return;
+  bone.parent.getWorldQuaternion(_q1); model.getWorldQuaternion(_q2);
+  _q1.premultiply(_q2.invert());                     // поворот батька відносно моделі
+  _v1.copy(axis).applyQuaternion(_q1.clone().invert());
+  bone.quaternion.premultiply(new T3.Quaternion().setFromAxisAngle(_v1, ang));
+}
+function buildHumanModel(p) {
+  const root = new T3.Group(), body = new T3.Group(); root.add(body);
+  const g = T3.SkeletonUtils.clone(HUMAN.scene); body.add(g);
+  const sc = p.height; g.scale.setScalar(sc);
+  let bodyMesh = null;
+  g.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    o.castShadow = true; o.frustumCulled = false;
+    if (o.name === 'SuperHero_Male') { bodyMesh = o; o.material = kitMaterial(p); }
+    if (o.name === 'Eyebrows' && HUMAN.browMat) o.material = hairMat(HUMAN.browMat, p.hair);
+  });
+  const sk = bodyMesh.skeleton, B = (n) => sk.getBoneByName(n);
+  const head = B('Head');
+  g.updateMatrixWorld(true);
+  const toHead = head.matrixWorld.clone().invert().multiply(g.matrixWorld);
+  const addHair = (name) => {
+    const src = HUMAN.hair[name]; if (!src) return;
+    const h = new T3.Mesh(src.geometry, hairMat(src.material, p.hair)); h.castShadow = true;
+    h.matrixAutoUpdate = false; h.matrix.copy(toHead); head.add(h);
+  };
+  if (p.hairStyle === 1) addHair('Hair_Buzzed'); else if (p.hairStyle === 2) addHair('Hair_SimpleParted');
+  if (p.beard) addHair('Hair_Beard');
+  const mixer = new T3.AnimationMixer(g), act = {};
+  for (const [k, n] of [...LOCO, ...EXTRA]) {
+    const c = HUMAN.clips[n]; if (!c) continue;
+    const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); act[k] = a;
+    if (k !== 'idle' && LOCO.some((l) => l[0] === k)) a.timeScale = 0;
+  }
+  if (act.fall) { act.fall.setLoop(T3.LoopOnce); act.fall.clampWhenFinished = true; }
+  act.idle.time = Math.random() * 2;
+  scene.add(root);
+  return { human: true, root, body, g, mixer, act, gph: Math.random(), w: { idle: 1 }, bones: {
+    head, neck: B('neck_01'), spine: B('spine_02'), spine3: B('spine_03'), pelvis: B('pelvis'),
+    thighR: B('thigh_r'), calfR: B('calf_r'), footR: B('foot_r'), thighL: B('thigh_l'), calfL: B('calf_l'),
+    armL: B('upperarm_l'), armR: B('upperarm_r'), foreL: B('lowerarm_l'), foreR: B('lowerarm_r'),
+  } };
+}
+const ramp = (x, a, b) => clamp((x - a) / (b - a), 0, 1);
+function animateHuman(p, dt) {
+  const m = p.model, sp = hyp(p.vx, p.vy), A = m.act, Bn = m.bones;
+  m.root.position.copy(V(p.x, p.y, 0));
+  m.root.rotation.y = Math.atan2(Math.cos(p.face), Math.sin(p.face));
+  m.body.rotation.set(0, 0, 0); m.body.position.set(0, 0, 0);
+  const fx = Math.cos(p.face), fy = Math.sin(p.face);
+  const fl = sp > 0.3 ? (p.vx * fx + p.vy * fy) / sp : 1;
+  // суміш циклів: стійка → хода → біг → спринт, кроки синхронізовані зі швидкістю
+  const s = sp * (0.55 + 0.45 * Math.abs(fl));
+  const tw = { idle: 1 - ramp(s, 0.15, 0.9), walk: ramp(s, 0.15, 0.9) * (1 - ramp(s, 1.8, 3.0)), jog: ramp(s, 1.8, 3.0) * (1 - ramp(s, 5.0, 6.6)), sprint: ramp(s, 5.0, 6.6) };
+  let special = null;
+  if (p.stun > 0 && p.fallen) special = 'fall';
+  else if (p.jump > 0) special = 'jump';
+  else if (state === 'goal' && p.team === lastGoalTeam && !p.gk && sp < 2.5) special = 'dance';
+  else if (p.slide > 0 || p.dive > 0) special = 'crouch';
+  const k = dt > 0 ? Math.min(1, dt * 10) : 1;
+  let rate = 0;
+  for (const [key, , native] of LOCO) {
+    const a = A[key]; if (!a) continue;
+    const target = special ? 0 : tw[key];
+    m.w[key] = lerp(m.w[key] || 0, target, k);
+    a.setEffectiveWeight(m.w[key]);
+    if (native) rate += tw[key] * clamp(sp / native, 0.55, 1.6) / a.getClip().duration;
+  }
+  m.gph += rate * dt * (fl < -0.2 ? -1 : 1);
+  const ph = ((m.gph % 1) + 1) % 1;
+  for (const [key, , native] of LOCO) if (native && A[key]) A[key].time = ph * A[key].getClip().duration;
+  for (const [key] of EXTRA) {
+    const a = A[key]; if (!a) continue;
+    const on = special === key;
+    if (on && (m.w[key] || 0) < 0.01) { a.reset(); a.play(); }
+    m.w[key] = lerp(m.w[key] || 0, on ? 1 : 0, Math.min(1, k * 1.5));
+    a.setEffectiveWeight(m.w[key]);
+  }
+  m.mixer.update(dt);
+  // поверх анімації — удар по м'ячу, погляд на м'яч, нахили
+  const md = m.g;
+  if (p.kickAnim > 0) {
+    const t = 1 - p.kickAnim / 0.3;
+    const hip = t < 0.4 ? lerp(0, 0.9, t / 0.4) : lerp(0.9, -1.25, (t - 0.4) / 0.6);
+    const knee = t < 0.4 ? lerp(0.2, 1.5, t / 0.4) : lerp(1.5, 0.05, (t - 0.4) / 0.6);
+    const w = Math.min(1, Math.min(t, 1 - t) * 6 + 0.3);
+    md.updateMatrixWorld(true);
+    boneRot(Bn.thighR, AX_X, hip * w, md); md.updateMatrixWorld(true);
+    boneRot(Bn.calfR, AX_X, knee * w * 0.8, md);
+    boneRot(Bn.armL, AX_Z, 0.5 * w, md); boneRot(Bn.armR, AX_Z, -0.4 * w, md);
+    boneRot(Bn.spine, AX_X, 0.12 * w, md);
+  } else if (p.touchAnim > 0) {
+    md.updateMatrixWorld(true);
+    boneRot(Bn.thighR, AX_X, -0.4 * (p.touchAnim / 0.18), md);
+  }
+  if (!special) {
+    const ha = clamp(-angDiff(Math.atan2(ball.y - p.y, ball.x - p.x), p.face), -1.1, 1.1);
+    p.headY = lerp(p.headY, ha * (sp < 3 ? 0.9 : 0.4), dt > 0 ? Math.min(1, dt * 6) : 1);
+    md.updateMatrixWorld(true);
+    boneRot(Bn.neck, AX_Y, p.headY * 0.45, md); md.updateMatrixWorld(true);
+    boneRot(Bn.head, AX_Y, p.headY * 0.55, md);
+    m.body.rotation.set(p.leanF * 0.1, 0, -p.leanS * 0.22);
+  }
+  if (p.slide > 0) { m.body.rotation.x = -1.0; m.body.position.y = 0.25; }
+  if (p.dive > 0) {
+    const t = clamp((0.7 - p.dive) / 0.22, 0, 1), right = Math.cos(p.face) * p.diveDy;
+    m.body.rotation.z = (right > 0 ? -1 : 1) * 1.35 * t;
+    m.body.position.y = Math.sin(t * Math.PI * 0.5) * 0.45;
+    md.updateMatrixWorld(true);
+    boneRot(Bn.armL, AX_Z, 1.2 * t, md); boneRot(Bn.armR, AX_Z, -1.2 * t, md);
+  }
+  if (p.jump > 0) m.body.position.y = Math.sin(p.jump / 0.55 * Math.PI) * 0.45;
+  if (ball.owner === p && ball.held) {
+    md.updateMatrixWorld(true);
+    boneRot(Bn.armL, AX_X, -1.1, md); boneRot(Bn.armR, AX_X, -1.1, md);
+  }
 }
 
 // ── М'яч
@@ -623,13 +840,14 @@ function makePlayers() {
   for (let t = 0; t < 2; t++) FORM.forEach((f, i) => {
     const p = {
       team: t, i, role: f.r, gk: f.r === 'GK', num: NUMS[i],
-      x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false, amp: 0, leanF: 0, leanS: 0, headY: 0,
+      x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false, amp: 0, leanF: 0, leanS: 0, headY: 0, pace: rand(0.93, 1.06),
       kickCd: 0, stun: 0, slide: 0, dive: 0, diveDy: 0, tackleCd: 0, saveCd: 0, kickAnim: 0, touchAnim: 0, touchCd: 0, jump: 0, holdT: 0,
       jx: rand(-2, 2), jy: rand(-2, 2), jT: rand(2, 5), decT: 0, locked: false, pending: null, fallen: false, react: 0, read: 0,
       skin: SKINS[(Math.random() * SKINS.length) | 0], hair: HAIRS[(Math.random() * HAIRS.length) | 0],
-      boot: [0x111111, 0xf2f2f2, 0xff5a1f, 0x2ad1ff, 0xffd34d][(Math.random() * 5) | 0], hairStyle: Math.random() < 0.12 ? 0 : Math.random() < 0.3 ? 2 : 1,
+      boot: [0x111111, 0xf2f2f2, 0xff5a1f, 0x2ad1ff, 0xffd34d][(Math.random() * 5) | 0], hairStyle: Math.random() < 0.12 ? 0 : Math.random() < 0.4 ? 2 : 1,
+      beard: Math.random() < 0.3, skinLight: Math.random() < 0.6, skinTint: [0xffffff, 0xf3e3d6, 0xffeee0, 0xe8d2c0][(Math.random() * 4) | 0], height: rand(0.96, 1.04),
     };
-    p.model = buildPlayerModel(p);
+    p.model = HUMAN ? buildHumanModel(p) : buildPlayerModel(p);
     players.push(p);
   });
 }
@@ -673,7 +891,7 @@ function startMatch(isDemo) {
 // ───────────────────────── Допоміжні ─────────────────────────
 const D = () => DIFF[settings.diff];
 const isAI = (p) => humanTeam >= 0 && p.team !== humanTeam;
-function spdMul(p) { if (humanTeam < 0) return 1; return p.team === humanTeam ? 0.97 : D().speed; }
+function spdMul(p) { const k = p.pace || 1; if (humanTeam < 0) return k; return (p.team === humanTeam ? 0.97 : D().speed) * k; }
 function gkSkill(gk) { return isAI(gk) ? D().gk : 0.72; }
 function oppGoalX(t) { return TEAMS[t].dir > 0 ? L : 0; }
 function ownGoalX(t) { return TEAMS[t].dir > 0 ? 0 : L; }
@@ -1098,9 +1316,11 @@ function movePlayers(dt) {
     const nsp = hyp(p.vx, p.vy);
     if (p.stun <= 0 && p.dive <= 0) {
       let tf = null;
-      if (nsp > 0.5) tf = Math.atan2(p.vy, p.vx);
-      else if (ball.owner !== p && p !== ctrl) tf = Math.atan2(ball.y - p.y, ball.x - p.x);
-      if (tf !== null) p.face += angDiff(tf, p.face) * Math.min(1, dt * (nsp > 6 ? 11 : 14));
+      // без м'яча на невеликій швидкості гравці дивляться на м'яч і переступають боком чи спиною
+      const watch = ball.owner !== p && p !== ctrl && (p.gk || nsp < 4.2) && state !== 'goal';
+      if (watch) tf = Math.atan2(ball.y - p.y, ball.x - p.x);
+      else if (nsp > 0.5) tf = Math.atan2(p.vy, p.vx);
+      if (tf !== null) p.face += angDiff(tf, p.face) * Math.min(1, dt * (p === ctrl ? 22 : nsp > 6 ? 9 : 12));
     }
     p.amp += (Math.min(1, nsp / 7.5) - p.amp) * Math.min(1, dt * 8);
     if (nsp > 0.25) p.phase += (4.6 + nsp * 0.68) * dt;   // темп кроків: ходьба ~1.7, спринт ~3 кроки/с
@@ -1120,7 +1340,8 @@ function dribble(o, dt) {
   const sp = hyp(o.vx, o.vy);
   let fx, fy;
   if (sp > 0.8) { fx = o.vx / sp; fy = o.vy / sp; } else { fx = Math.cos(o.face); fy = Math.sin(o.face); }
-  const lead = 0.55 + (o.sprint ? 0.42 : 0.1) + sp * 0.03;
+  // м'яч біля ніг; на кожному дотику трохи відкочується вперед, на прискоренні — далі
+  const lead = 0.4 + (o.sprint ? 0.32 : 0.06) + sp * 0.025 + Math.max(0, o.touchAnim) / 0.18 * (o.sprint ? 0.45 : 0.25);
   const tx = o.x + fx * lead, ty = o.y + fy * lead;
   const d = hyp(b.x - o.x, b.y - o.y);
   o.touchCd -= dt;
@@ -1128,13 +1349,13 @@ function dribble(o, dt) {
   if (d > 3.0 || b.z > 1.4) { b.owner = null; return; }   // м'яч утік — тепер він нічий
   if (o.stun > 0 || b.z > 0.45) return;
   // бажана швидкість м'яча: швидкість гравця + поправка до точки перед ним
-  const k = o.sprint ? 5.5 : 9;
+  const k = o.sprint ? 10 : 15;
   const wx = o.vx + clamp((tx - b.x) * k * 0.65, -5, 5), wy = o.vy + clamp((ty - b.y) * k * 0.65, -5, 5);
   const bl = 1 - Math.exp(-k * dt);
   b.vx += (wx - b.vx) * bl; b.vy += (wy - b.vy) * bl;
   if (b.z < 0.05) b.vz = 0;
   b.spin *= 0.8; b.top = 0;
-  if (o.touchCd <= 0 && sp > 1.2) { o.touchAnim = 0.18; o.touchCd = clamp(0.55 - sp * 0.03, 0.28, 0.55); }
+  if (o.touchCd <= 0 && sp > 1.2) { o.touchAnim = 0.18; o.touchCd = clamp(0.62 - sp * 0.035, 0.32, 0.62); }
 }
 function postHit(v, bar) { if (v > 3) { Sound.clang(); if (state === 'play' && !demo) showBanner(bar ? 'ПОПЕРЕЧИНА!' : 'ШТАНГА!', '', 1.0); } }
 function collidePosts(b) {
@@ -1407,13 +1628,13 @@ function updateCamera(dt, now) {
     const wide = camMode === 1;   // 0 — ближня трансляція, 1 — широкий план
     look.x = clamp(look.x, -L / 2 + (wide ? 12 : 2), L / 2 - (wide ? 12 : 2));
     look.z = clamp(look.z, -W / 2 + 4, W / 2 - 4);
-    const back = isMobile ? 15 : 19, hgt = isMobile ? 7.8 : 9;   // на телефоні камера ближче — гравці більші
+    const back = isMobile ? 12 : 19, hgt = isMobile ? 6.6 : 9;   // на телефоні камера ближче — гравці більші
     pos = wide ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, hgt, Math.min(W / 2 + 7, look.z + back));
   }
   const k = Math.min(1, dt * (demo ? 1 : 3.2));
   camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : 2.5)));
   camera.position.copy(camP); camera.lookAt(camT);
-  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : 34;
+  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : isMobile ? 31 : 34;
   camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix();
   sun.position.copy(camT).add(new T3.Vector3(-26, 60, -32)); sun.target.position.copy(camT); sun.target.updateMatrixWorld();
 }
@@ -1454,7 +1675,7 @@ function updatePowerBar() {
 
 // ───────────────────────── Відмальовка ─────────────────────────
 function render(dt, now) {
-  for (const p of players) animatePlayer(p);
+  for (const p of players) animatePlayer(p, dt);
   ballMesh.position.copy(V(ball.x, ball.y, ball.z + BALL_R * BALL_VIS));
   ballMesh.quaternion.copy(ball.q);
   for (const n of nets) updateNet(n);
@@ -1579,10 +1800,17 @@ $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').o
   full.onclick = () => (document.fullscreenElement || document.webkitFullscreenElement ? exitFullscreen() : goFullscreen());
 })();
 buildPitch(); buildStadium(); buildBoards(); buildGoals(); buildBall();
-startMatch(true);
-$('loading').classList.add('hidden');
-window.__started = true;
-requestAnimationFrame(frame);
+$('loading').textContent = 'Завантаження гравців…';
+let booted = false;
+function boot() {
+  if (booted) return; booted = true;
+  startMatch(true);
+  $('loading').classList.add('hidden');
+  window.__started = true;
+  requestAnimationFrame(frame);
+}
+loadHumans().then(boot);
+setTimeout(boot, 20000);   // якщо моделі довго вантажаться — грати з простими
 
 window.GOLEADOR = {
   get state() { return state; }, get score() { return score; }, get ball() { return ball; }, get players() { return players; },
