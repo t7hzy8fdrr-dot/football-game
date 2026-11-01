@@ -94,7 +94,7 @@ button.ghost {
   background: rgba(255,255,255,.38); box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
 #btns { position: absolute; right: calc(4vw + env(safe-area-inset-right)); bottom: 6vh; display: flex; gap: 14px; align-items: flex-end; pointer-events: auto; }
-#btns button, #tPause, #tFull { touch-action: none;
+#btns button, #tPause, #tFull, #tCam { touch-action: none;
   border: 2px solid rgba(255,255,255,.25); color: #fff; font: inherit; font-weight: 900; border-radius: 50%;
   background: rgba(15,20,30,.55); backdrop-filter: blur(2px);
 }
@@ -104,6 +104,8 @@ button.ghost {
 #btns button.down { transform: scale(.92); filter: brightness(1.35); }
 #tPause { position: absolute; top: 14px; right: calc(14px + env(safe-area-inset-right)); width: 46px; height: 46px; pointer-events: auto; font-size: 14px; }
 #tFull { position: absolute; top: 14px; right: calc(70px + env(safe-area-inset-right)); width: 46px; height: 46px; pointer-events: auto; font-size: 20px; }
+#tCam { position: absolute; top: 14px; right: calc(126px + env(safe-area-inset-right)); width: 46px; height: 46px; pointer-events: auto; font-size: 20px; }
+#tFull.hidden + #tCam { right: calc(70px + env(safe-area-inset-right)); }
 
 @media (max-height: 500px) {
   .panel { padding: 14px 20px 12px; }
@@ -124,8 +126,8 @@ button.ghost {
 @media (orientation: portrait) and (pointer: coarse) {
   #board { transform: scale(.72); transform-origin: left top; left: 8px; top: calc(8px + env(safe-area-inset-top)); }
   #minimap { left: auto; right: 8px; top: calc(60px + env(safe-area-inset-top)); bottom: auto; transform: none; width: 100px; height: 66px; }
-  #tPause, #tFull { width: 40px; height: 40px; top: calc(8px + env(safe-area-inset-top)); }
-  #tPause { right: 8px; } #tFull { right: 56px; }
+  #tPause, #tFull, #tCam { width: 40px; height: 40px; top: calc(8px + env(safe-area-inset-top)); }
+  #tPause { right: 8px; } #tFull { right: 56px; } #tCam { right: 104px; } #tFull.hidden + #tCam { right: 56px; }
   #btns { gap: 8px; right: 3vw; bottom: calc(3vh + env(safe-area-inset-bottom)); }
   #tSprint { width: 56px; height: 56px; }
   #tPass { width: 74px; height: 74px; }

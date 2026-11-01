@@ -48,7 +48,8 @@ const toL = toW;
 const isMobile = window.matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 const isPortrait = () => window.innerHeight > window.innerWidth * 1.05;
 // на телефоні, який тримають вертикально, — камера за спиною гравця (поле видно на весь екран)
-const camModeEff = () => (isMobile && isPortrait() && !demo ? 2 : camMode);
+let camPicked = false;   // гравець сам обрав камеру кнопкою — тоді не перемикаємо автоматично
+const camModeEff = () => (isMobile && isPortrait() && !demo && !camPicked ? 2 : camMode);
 
 // ───────────────────────── 3D-сцена ─────────────────────────
 const T3 = THREE;
@@ -692,7 +693,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=6'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=7'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -1178,8 +1179,13 @@ window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'KeyM') Sound.setMuted(!Sound.muted);
-  if (e.code === 'KeyC' && !demo) { camMode = (camMode + 1) % 3; showBanner(['КАМЕРА: ТРАНСЛЯЦІЯ', 'КАМЕРА: ШИРОКИЙ ПЛАН', 'КАМЕРА: ЗА ГРАВЦЕМ'][camMode], '', 1.0); }
+  if (e.code === 'KeyC') nextCam();
 });
+function nextCam() {
+  if (demo) return;
+  camMode = (camModeEff() + 1) % 3; camPicked = true;
+  showBanner(['КАМЕРА: ТРАНСЛЯЦІЯ', 'КАМЕРА: ШИРОКИЙ ПЛАН', 'КАМЕРА: ЗА ГРАВЦЕМ'][camMode], '', 1.0);
+}
 window.addEventListener('keyup', (e) => { keys[e.code] = false; released[e.code] = true; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
@@ -1492,10 +1498,36 @@ function movePlayers(dt) {
     if (nsp > 0.25) p.phase += (4.6 + nsp * 0.68) * dt;   // темп кроків: ходьба ~1.7, спринт ~3 кроки/с
     p.x = clamp(p.x, -4.5, L + 4.5); p.y = clamp(p.y, -4.5, W + 4.5);
   }
+  for (const p of players) goalBlock(p);
   for (let i = 0; i < players.length; i++) for (let j = i + 1; j < players.length; j++) {
     const a = players[i], b = players[j];
     const dx = b.x - a.x, dy = b.y - a.y, d = hyp(dx, dy);
     if (d < 0.7 && d > 0.001) { const push = (0.7 - d) / 2; a.x -= dx / d * push; a.y -= dy / d * push; b.x += dx / d * push; b.y += dy / d * push; }
+  }
+}
+
+// Ворота — перешкода: зайти можна лише спереду, крізь бокову й задню сітку не пробігти
+function goalBlock(p) {
+  const R = 0.35;
+  if (!p.gd) { p.gd = [-p.x, p.x - L]; p.gin = -1; }
+  for (let side = 0; side < 2; side++) {
+    const gx = side ? L : 0, out = side ? 1 : -1, d = (p.x - gx) * out, prev = p.gd[side];
+    p.gd[side] = d;
+    if (d <= 0) { if (p.gin === side) p.gin = -1; continue; }
+    if (prev <= 0 && d < 1.0 && p.y > PT && p.y < PB) p.gin = side;   // зайшов у ворота спереду
+    if (p.gin === side) {                                   // усередині — сітка не випускає
+      p.y = clamp(p.y, PT + R, PB - R);
+      if (d > GOAL_D - R) p.x = gx + out * (GOAL_D - R);
+      continue;
+    }
+    if (d > GOAL_D + R || p.y < PT - R || p.y > PB + R) continue;
+    // зовні впритул до сітки — відсунути до найближчої сторони
+    const toT = p.y - (PT - R), toB = (PB + R) - p.y, toBack = (GOAL_D + R) - d;
+    const m = Math.min(toT, toB, toBack);
+    if (m === toBack) p.x = gx + out * (GOAL_D + R);
+    else if (m === toT) p.y = PT - R;
+    else p.y = PB + R;
+    p.gd[side] = (p.x - gx) * out;
   }
 }
 
@@ -1930,7 +1962,7 @@ function togglePause() {
   $('pause').classList.toggle('hidden', !paused);
 }
 $('play').onclick = play; $('again').onclick = play;
-$('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause;
+$('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause; $('tCam').onclick = nextCam;
 
 (() => {   // сенсорне керування: джойстик з'являється там, де торкнувся палець (ліва половина екрана)
   const zone = $('stickZone'), stick = $('stick'), knob = $('knob');
