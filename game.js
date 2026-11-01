@@ -44,6 +44,35 @@ const CLUBS = [
 ];
 // сила клубу (для турніру й кар'єри): впливає на результати матчів, які грають без вас
 [79, 76, 86, 84, 84, 78, 82, 82, 80, 85].forEach((r, i) => (CLUBS[i].rt = r));
+// ── Редактор: зміни гравця (назви, кольори, емблема, склад) зберігаються на пристрої ──
+const CLUB_DEFAULTS = CLUBS.map((c) => ({ ...c }));
+const EDIT_KEY = 'goleador-edits-v1';
+let EDITS = {};
+try { EDITS = JSON.parse(localStorage.getItem(EDIT_KEY)) || {}; } catch (e) { EDITS = {}; }
+const hexStr = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0');
+const lumOf = (c) => (0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255)) / 255;
+const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+function applyEdits() {
+  CLUBS.forEach((c, i) => {
+    const d = CLUB_DEFAULTS[i], e = EDITS[i] || {};
+    for (const k of Object.keys(c)) delete c[k];
+    Object.assign(c, d);
+    if (e.name) c.name = e.name;
+    if (e.short) c.short = e.short;
+    for (const k of ['shirt', 'trim', 'shorts', 'socks', 'gk']) if (typeof e[k] === 'number') c[k] = e[k];
+    if ('stripe' in e) { if (e.stripe === null) delete c.stripe; else c.stripe = e.stripe; }
+    if (typeof e.shirt === 'number' && e.shirt !== d.shirt) { c.css = hexStr(e.shirt); c.num = lumOf(e.shirt) > 0.6 ? '#111111' : '#ffffff'; }
+    c.crest = e.crest || null; c.players = e.players || null; c.nums = e.nums || null;
+  });
+}
+applyEdits();
+// значок клубу: емблема гравця або кольоровий квадратик форми
+function clubBadge(i) {
+  const c = CLUBS[i];
+  if (c.crest) return `<img class="crest" src="${c.crest}" alt="">`;
+  const bg = c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hexStr(c.shirt)} 0 3px, ${hexStr(c.stripe)} 3px 6px)` : hexStr(c.shirt);
+  return `<i style="background:${bg}"></i>`;
+}
 const TEAMS = [{ ...CLUBS[0], idx: 0, dir: 1 }, { ...CLUBS[1], idx: 1, dir: -1 }];
 const FORM = [
   { r: 'GK', x: 3, y: 34 },
@@ -714,7 +743,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=10'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=11'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -1030,7 +1059,7 @@ function makePlayers() {
   players = [];
   for (let t = 0; t < 2; t++) FORM.forEach((f, i) => {
     const p = {
-      team: t, i, role: f.r, gk: f.r === 'GK', num: NUMS[i],
+      team: t, i, role: f.r, gk: f.r === 'GK', num: (CLUBS[TEAMS[t].idx ?? t].nums || NUMS)[i] || NUMS[i],
       x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false, amp: 0, leanF: 0, leanS: 0, headY: 0, pace: rand(0.93, 1.06),
       kickCd: 0, stun: 0, slide: 0, dive: 0, diveDy: 0, tackleCd: 0, saveCd: 0, kickAnim: 0, touchAnim: 0, touchCd: 0, jump: 0, holdT: 0,
       jx: rand(-2, 2), jy: rand(-2, 2), jT: rand(2, 5), decT: 0, locked: false, pending: null, fallen: false, react: 0, read: 0,
@@ -1044,8 +1073,9 @@ function makePlayers() {
   // імена: у кожного клубу постійний склад, без повторів у матчі
   const used = new Set();
   for (let t = 0; t < 2; t++) {
-    const pool = clubNames(TEAMS[t].idx ?? t); let k = 0;
-    for (const p of players) if (p.team === t) { while (used.has(pool[k])) k++; p.name = pool[k++]; used.add(p.name); }
+    const ci = TEAMS[t].idx ?? t, own = CLUBS[ci].players, pool = clubNames(ci); let k = 0;
+    for (const p of players) if (p.team === t && own && own[p.i]) { p.name = own[p.i]; used.add(p.name); }
+    for (const p of players) if (p.team === t && !(own && own[p.i])) { while (used.has(pool[k])) k++; p.name = pool[k++]; used.add(p.name); }
   }
   nameLayer.innerHTML = '';
   for (const p of players) {
@@ -1124,8 +1154,9 @@ function applyClubs() {
   TEAMS[0] = { ...CLUBS[settings.home], idx: settings.home, dir: 1 }; TEAMS[1] = { ...CLUBS[settings.away], idx: settings.away, dir: -1 };
   const bt = document.querySelectorAll('#board .b-team');
   if (bt.length === 2) {
-    bt[0].innerHTML = `<i style="background:${TEAMS[0].css}"></i>${TEAMS[0].short}`;
-    bt[1].innerHTML = `${TEAMS[1].short}<i style="background:${TEAMS[1].css}"></i>`;
+    const mark = (t) => (TEAMS[t].crest ? `<img class="crest" src="${TEAMS[t].crest}" alt="">` : `<i style="background:${TEAMS[t].css}"></i>`);
+    bt[0].innerHTML = `${mark(0)}${esc(TEAMS[0].short)}`;
+    bt[1].innerHTML = `${esc(TEAMS[1].short)}${mark(1)}`;
   }
   if (screens.drawBand) screens.drawBand();
 }
@@ -2066,14 +2097,12 @@ function goFullscreen() {   // на телефоні гра відкриваєт
 }
 function exitFullscreen() { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* ок */ } }
 (() => {   // вибір команд у меню
-  const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-  const sw = (c) => c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hex(c.shirt)} 0 3px, ${hex(c.stripe)} 3px 6px)` : hex(c.shirt);
   const draw = () => {
     for (const [id, key] of [['clubHome', 'home'], ['clubAway', 'away']]) {
       const el = $(id); el.innerHTML = '';
       CLUBS.forEach((c, i) => {
         const b = document.createElement('button');
-        b.innerHTML = `<i style="background:${sw(c)}"></i>${c.name}`;
+        b.innerHTML = `${clubBadge(i)}${esc(c.name)}`;
         if (settings[key] === i) b.classList.add('on');
         b.onclick = () => {
           const other = key === 'home' ? 'away' : 'home';
@@ -2117,6 +2146,92 @@ $('again').onclick = () => (settings.mode === 'match' ? play() : Modes.open());
 $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause; $('tCam').onclick = nextCam;
 
 
+// ───────────────────────── Редактор команд ─────────────────────────
+const Editor = (() => {
+  const ROLES = ['ВР', 'ЗАХ', 'ЗАХ', 'ЗАХ', 'ПЗ', 'ПЗ', 'НАП'];
+  let cur = 0, crest = null;
+  const ed = (id) => $(id);
+  const toInt = (v) => parseInt(v.slice(1), 16);
+  function persist() { try { localStorage.setItem(EDIT_KEY, JSON.stringify(EDITS)); } catch (e) { alert('Не вдалося зберегти: замало місця на пристрої.'); } }
+  function rowsHtml() {
+    const c = CLUBS[cur], names = c.players || [], nums = c.nums || NUMS, pool = clubNames(cur);
+    let k = 0;
+    return '<div class="br-h">СКЛАД</div>' + ROLES.map((r, i) => {
+      const nm = names[i] || pool[k++];
+      return `<div class="ed-pl"><span class="ed-role">${r}</span><input class="ed-num" type="number" min="1" max="99" inputmode="numeric" value="${nums[i] || NUMS[i]}"><input class="ed-name" maxlength="14" value="${esc(nm)}"></div>`;
+    }).join('');
+  }
+  function crestPrev() { ed('edCrestPrev').innerHTML = crest ? `<img src="${crest}" alt="">` : '<span>немає</span>'; ed('edCrestDel').classList.toggle('hidden', !crest); }
+  function render() {
+    const box = ed('edClubs'); box.innerHTML = '';
+    CLUBS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.innerHTML = `${clubBadge(i)}${esc(c.name)}`;
+      if (i === cur) b.classList.add('on');
+      b.onclick = () => { collect(); cur = i; render(); };
+      box.appendChild(b);
+    });
+    const c = CLUBS[cur];
+    ed('edName').value = c.name; ed('edShort').value = c.short;
+    ed('edShirt').value = hexStr(c.shirt); ed('edTrim').value = hexStr(c.trim);
+    ed('edShorts').value = hexStr(c.shorts); ed('edSocks').value = hexStr(c.socks); ed('edGk').value = hexStr(c.gk);
+    ed('edStripeOn').checked = c.stripe !== undefined; ed('edStripe').value = hexStr(c.stripe !== undefined ? c.stripe : 0x111111);
+    crest = c.crest; crestPrev();
+    ed('edPlayers').innerHTML = rowsHtml();
+  }
+  function collect() {
+    const d = CLUB_DEFAULTS[cur], e = {};
+    const name = ed('edName').value.trim().toUpperCase().slice(0, 14), short = ed('edShort').value.trim().toUpperCase().slice(0, 3);
+    if (name && name !== d.name) e.name = name;
+    if (short && short !== d.short) e.short = short;
+    for (const [k, id] of [['shirt', 'edShirt'], ['trim', 'edTrim'], ['shorts', 'edShorts'], ['socks', 'edSocks'], ['gk', 'edGk']]) {
+      const v = toInt(ed(id).value); if (v !== d[k]) e[k] = v;
+    }
+    const sOn = ed('edStripeOn').checked, sv = toInt(ed('edStripe').value);
+    if (!sOn && d.stripe !== undefined) e.stripe = null;
+    if (sOn && sv !== d.stripe) e.stripe = sv;
+    if (crest) e.crest = crest;
+    const pool = clubNames(cur);
+    const names = [...document.querySelectorAll('#edPlayers .ed-name')].map((x) => x.value.trim().toUpperCase().slice(0, 14));
+    const nums = [...document.querySelectorAll('#edPlayers .ed-num')].map((x, i) => clamp(parseInt(x.value, 10) || NUMS[i], 1, 99));
+    if (names.some((n, i) => n && n !== pool[i])) e.players = names.map((n, i) => n || pool[i]);
+    if (nums.some((n, i) => n !== NUMS[i])) e.nums = nums;
+    if (Object.keys(e).length) EDITS[cur] = e; else delete EDITS[cur];
+    persist(); applyEdits();
+  }
+  function loadCrest(file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const S = 96, cv = document.createElement('canvas'); cv.width = cv.height = S;
+        const g = cv.getContext('2d'), k = Math.min(S / img.width, S / img.height), w = img.width * k, h = img.height * k;
+        g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+        crest = cv.toDataURL('image/png'); crestPrev();
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  }
+  function open() {
+    cur = settings.home; render();
+    $('menu').classList.add('hidden'); $('editor').classList.remove('hidden');
+  }
+  function close() {
+    $('editor').classList.add('hidden'); $('menu').classList.remove('hidden');
+    if (window.drawClubs) window.drawClubs();
+    startMatch(true);
+  }
+  ed('edCrestFile').onchange = (e) => { loadCrest(e.target.files[0]); e.target.value = ''; };
+  ed('edCrestDel').onclick = () => { crest = null; crestPrev(); };
+  ed('edSave').onclick = () => { collect(); render(); const b = ed('edSave'); b.textContent = 'ЗБЕРЕЖЕНО ✓'; setTimeout(() => (b.textContent = 'ЗБЕРЕГТИ'), 1200); };
+  ed('edBack').onclick = () => { collect(); close(); };
+  ed('edReset').onclick = () => { if (!confirm(`Повернути клуб ${CLUBS[cur].name} як було?`)) return; delete EDITS[cur]; persist(); applyEdits(); render(); };
+  $('openEditor').onclick = open;
+  return { open };
+})();
+
 // ───────────────────────── Режими: турнір і кар'єра ─────────────────────────
 const Modes = (() => {
   const KEY = { cup: 'goleador-cup-v1', career: 'goleador-career-v1' };
@@ -2124,9 +2239,7 @@ const Modes = (() => {
   const save = (m, st) => { try { localStorage.setItem(KEY[m], JSON.stringify(st)); } catch (e) { /* приватний режим — без збереження */ } };
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const pois = (l) => { let k = 0, p = 1; const e = Math.exp(-l); do { k++; p *= Math.random(); } while (p > e); return k - 1; };
-  const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-  const sw = (i) => { const c = CLUBS[i]; return c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hex(c.shirt)} 0 3px, ${hex(c.stripe)} 3px 6px)` : hex(c.shirt); };
-  const tag = (i, me) => `<span class="tm${me ? ' me' : ''}"><i style="background:${sw(i)}"></i>${CLUBS[i].name}</span>`;
+  const tag = (i, me) => `<span class="tm${me ? ' me' : ''}">${clubBadge(i)}${esc(CLUBS[i].name)}</span>`;
   let st = null, mode = null;
   const rt = (i) => CLUBS[i].rt + (st && st.boost && i === st.club ? st.boost : 0);
   function sim(a, b) { const d = (rt(a) - rt(b)) * 0.07; return [pois(clamp(1.35 + d, 0.3, 3.2)), pois(clamp(1.35 - d, 0.3, 3.2))]; }
@@ -2248,7 +2361,7 @@ const Modes = (() => {
       const r = st.table[i];
       html += `<tr class="${i === st.club ? 'me' : ''}${k === 0 ? ' first' : ''}"><td>${k + 1}</td><td class="l">${tag(i, i === st.club)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}:${r.ga}</td><td><b>${pts(r)}</b></td></tr>`;
     });
-    html += '</table><div class="news"><div class="br-h">НОВИНИ</div>' + st.news.map((n) => `<p>${n}</p>`).join('');
+    html += '</table><div class="news"><div class="br-h">НОВИНИ</div>' + st.news.map((n) => `<p>${esc(n)}</p>`).join('');
     html += `<div class="br-h">КЛУБ</div><p>Мета: ${targetText(st.target)}</p><p>Трофеї: ${'🏆'.repeat(st.titles) || '—'}</p>`;
     if (st.boost) html += `<p>Підсилення складу: +${st.boost}</p>`;
     html += '</div></div>';
