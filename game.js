@@ -42,7 +42,9 @@ const CLUBS = [
   { name: 'ЗМІЇ',     short: 'ЗМІ', shirt: 0x1f56c8, stripe: 0x111111, trim: 0x111111, shorts: 0x111111, socks: 0x111111, gk: 0xc6e83a, gkTrim: 0x4a5a10, num: '#ffffff', css: '#1a3a90' },
   { name: 'БАРОНИ',   short: 'БАР', shirt: 0xdc0f2d, trim: 0xffffff, shorts: 0xdc0f2d, socks: 0xdc0f2d, gk: 0x111111, gkTrim: 0x444444, num: '#ffffff', css: '#dc0f2d' },
 ];
-const TEAMS = [{ ...CLUBS[0], dir: 1 }, { ...CLUBS[1], dir: -1 }];
+// сила клубу (для турніру й кар'єри): впливає на результати матчів, які грають без вас
+[79, 76, 86, 84, 84, 78, 82, 82, 80, 85].forEach((r, i) => (CLUBS[i].rt = r));
+const TEAMS = [{ ...CLUBS[0], idx: 0, dir: 1 }, { ...CLUBS[1], idx: 1, dir: -1 }];
 const FORM = [
   { r: 'GK', x: 3, y: 34 },
   { r: 'DF', x: 20, y: 13 }, { r: 'DF', x: 16, y: 34 }, { r: 'DF', x: 20, y: 55 },
@@ -712,7 +714,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=9'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=10'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -1016,8 +1018,9 @@ const Sound = {
 
 // ───────────────────────── Стан гри ─────────────────────────
 const STATS = { shots: 0, passes: 0, tackles: 0, headers: 0 };   // лічильники для тестів
-const settings = { diff: 'normal', mins: 4, home: 0, away: 1 };
+const settings = { diff: 'normal', mins: 4, home: 0, away: 1, mode: 'match' };
 let players = [], ball = null, state = 'kickoff', stateT = 0;
+let matchScorers = [];
 let score = [0, 0], clock = 0, matchLen = 240, humanTeam = -1, ctrl = null, demo = true, paused = false;
 let possTeam = 0, kickoffTeam = 0, passTarget = null, setpiece = null, lastGoalTeam = 0;
 let charge = 0, charging = false, autoSwT = 0, camMode = 0, lastInput = { dx: 0, dy: 0 };
@@ -1038,9 +1041,12 @@ function makePlayers() {
     p.model = HUMAN ? buildHumanModel(p) : buildPlayerModel(p);
     players.push(p);
   });
-  // імена: у кожної команди свої, без повторів
-  const pool = SURNAMES.slice().sort(() => Math.random() - 0.5);
-  players.forEach((p, k) => (p.name = pool[k % pool.length]));
+  // імена: у кожного клубу постійний склад, без повторів у матчі
+  const used = new Set();
+  for (let t = 0; t < 2; t++) {
+    const pool = clubNames(TEAMS[t].idx ?? t); let k = 0;
+    for (const p of players) if (p.team === t) { while (used.has(pool[k])) k++; p.name = pool[k++]; used.add(p.name); }
+  }
   nameLayer.innerHTML = '';
   for (const p of players) {
     const el = document.createElement('div');
@@ -1049,6 +1055,15 @@ function makePlayers() {
   }
 }
 const nameLayer = document.getElementById('names');
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function clubNames(ci) {
+  const r = seeded(ci * 7919 + 13), a = SURNAMES.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
 function updateNames() {
   const show = !demo && state !== 'goal' && humanTeam >= 0;
   const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
@@ -1106,7 +1121,7 @@ function setupKickoff(team) {
   if (humanTeam >= 0) ctrl = humanTeam === team ? players.find((p) => p.team === team && p.role === 'FW') : players.find((p) => p.team === humanTeam && p.i === 4);
 }
 function applyClubs() {
-  TEAMS[0] = { ...CLUBS[settings.home], dir: 1 }; TEAMS[1] = { ...CLUBS[settings.away], dir: -1 };
+  TEAMS[0] = { ...CLUBS[settings.home], idx: settings.home, dir: 1 }; TEAMS[1] = { ...CLUBS[settings.away], idx: settings.away, dir: -1 };
   const bt = document.querySelectorAll('#board .b-team');
   if (bt.length === 2) {
     bt[0].innerHTML = `<i style="background:${TEAMS[0].css}"></i>${TEAMS[0].short}`;
@@ -1117,7 +1132,7 @@ function applyClubs() {
 function startMatch(isDemo) {
   applyClubs();
   demo = isDemo; humanTeam = isDemo ? -1 : 0; ctrl = null;
-  score = [0, 0]; clock = 0; matchLen = isDemo ? 1e9 : settings.mins * 60;
+  score = [0, 0]; matchScorers = []; clock = 0; matchLen = isDemo ? 1e9 : settings.mins * 60;
   makePlayers(); setupKickoff(Math.random() < 0.5 ? 0 : 1);
   if (!isDemo) { showBanner('ПОЧАТОК МАТЧУ', `${TEAMS[0].name} — ${TEAMS[1].name}`, 1.8); Sound.crowdTo(0.07); }
 }
@@ -1855,7 +1870,9 @@ function goalScored(team) {
   score[team]++; lastGoalTeam = team;
   ball.inGoal = ball.x < 0 ? 0 : 1; ball.owner = null; ball.held = false;
   state = 'goal'; stateT = 4.0;
-  const scorer = ball.last && ball.last.team === team ? `${TEAMS[team].name} · №${ball.last.num}` : `${TEAMS[team].name} · автогол`;
+  const own = !(ball.last && ball.last.team === team);
+  const scorer = own ? `${TEAMS[team].name} · автогол` : `${ball.last.name} · №${ball.last.num}`;
+  if (team === humanTeam && !own) matchScorers.push(ball.last.name);
   showBanner('ГОЛ!', scorer, 3.2, true);
   Sound.whistle(1); Sound.goal();
   crowdUniforms.uJump.value = 1;
@@ -1866,6 +1883,9 @@ function endMatch() {
   setTimeout(() => {
     $('endTitle').textContent = score[0] > score[1] ? 'ПЕРЕМОГА!' : score[0] < score[1] ? 'ПОРАЗКА' : 'НІЧИЯ';
     $('endScore').textContent = `${score[0]} : ${score[1]}`;
+    const note = settings.mode !== 'match' ? Modes.record(score[0], score[1], matchScorers) : '';
+    $('endNote').textContent = note; $('endNote').classList.toggle('hidden', !note);
+    $('again').textContent = settings.mode === 'match' ? 'ЩЕ МАТЧ' : 'ДАЛІ';
     $('end').classList.remove('hidden');
   }, 2200);
 }
@@ -2065,12 +2085,15 @@ function exitFullscreen() { try { (document.exitFullscreen || document.webkitExi
       });
     }
   };
-  draw();
+  draw(); window.drawClubs = draw;
+  const modeSync = () => $('optAway').classList.toggle('hidden', settings.mode !== 'match');
+  document.querySelector('[data-opt="mode"]').addEventListener('click', () => setTimeout(modeSync));
+  modeSync();
 })();
 function play() {
   Sound.init();
   if (isMobile && !document.fullscreenElement) goFullscreen();
-  ['menu', 'end', 'pause'].forEach((id) => $(id).classList.add('hidden'));
+  ['menu', 'end', 'pause', 'hub'].forEach((id) => $(id).classList.add('hidden'));
   $('hud').classList.remove('hidden');
   if (isMobile || 'ontouchstart' in window) $('touch').classList.remove('hidden');
   paused = false;
@@ -2078,7 +2101,8 @@ function play() {
   camP.set(0, 20, 42);
 }
 function toMenu() {
-  ['end', 'pause', 'hud'].forEach((id) => $(id).classList.add('hidden'));
+  ['end', 'pause', 'hud', 'hub'].forEach((id) => $(id).classList.add('hidden'));
+  if (window.drawClubs) window.drawClubs();
   $('menu').classList.remove('hidden'); $('touch').classList.add('hidden');
   paused = false; Sound.crowdTo(0.03);
   startMatch(true);
@@ -2088,8 +2112,188 @@ function togglePause() {
   paused = !paused;
   $('pause').classList.toggle('hidden', !paused);
 }
-$('play').onclick = play; $('again').onclick = play;
+$('play').onclick = () => (settings.mode === 'match' ? play() : Modes.open());
+$('again').onclick = () => (settings.mode === 'match' ? play() : Modes.open());
 $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause; $('tCam').onclick = nextCam;
+
+
+// ───────────────────────── Режими: турнір і кар'єра ─────────────────────────
+const Modes = (() => {
+  const KEY = { cup: 'goleador-cup-v1', career: 'goleador-career-v1' };
+  const load = (m) => { try { return JSON.parse(localStorage.getItem(KEY[m])); } catch (e) { return null; } };
+  const save = (m, st) => { try { localStorage.setItem(KEY[m], JSON.stringify(st)); } catch (e) { /* приватний режим — без збереження */ } };
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const pois = (l) => { let k = 0, p = 1; const e = Math.exp(-l); do { k++; p *= Math.random(); } while (p > e); return k - 1; };
+  const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+  const sw = (i) => { const c = CLUBS[i]; return c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hex(c.shirt)} 0 3px, ${hex(c.stripe)} 3px 6px)` : hex(c.shirt); };
+  const tag = (i, me) => `<span class="tm${me ? ' me' : ''}"><i style="background:${sw(i)}"></i>${CLUBS[i].name}</span>`;
+  let st = null, mode = null;
+  const rt = (i) => CLUBS[i].rt + (st && st.boost && i === st.club ? st.boost : 0);
+  function sim(a, b) { const d = (rt(a) - rt(b)) * 0.07; return [pois(clamp(1.35 + d, 0.3, 3.2)), pois(clamp(1.35 - d, 0.3, 3.2))]; }
+  function pens() {
+    let a = 0, b = 0;
+    for (let i = 0; i < 5; i++) { a += Math.random() < 0.75; b += Math.random() < 0.75; }
+    while (a === b) { a += Math.random() < 0.75; b += Math.random() < 0.75; }
+    return [a, b];
+  }
+
+  // ── Турнір: 8 клубів, на вибування ──
+  const STAGES = ['ЧВЕРТЬФІНАЛ', 'ПІВФІНАЛ', 'ФІНАЛ'];
+  const pairUp = (t) => { const r = []; for (let i = 0; i < t.length; i += 2) r.push({ a: t[i], b: t[i + 1], ga: null, gb: null, pa: null, pb: null }); return r; };
+  const winner = (m) => (m.ga > m.gb || (m.ga === m.gb && m.pa > m.pb) ? m.a : m.b);
+  function newCup(club) {
+    const others = shuffle(CLUBS.map((_, i) => i).filter((i) => i !== club)).slice(0, 7);
+    return { club, rounds: [pairUp(shuffle([club, ...others]))], stage: 0, out: false, champ: null, last: '' };
+  }
+  function playRound(r) {
+    for (const m of r) if (m.ga === null) { [m.ga, m.gb] = sim(m.a, m.b); if (m.ga === m.gb) [m.pa, m.pb] = pens(); }
+  }
+  function nextStage() {
+    const r = st.rounds[st.stage];
+    if (st.stage === 2) { st.champ = winner(r[0]); return; }
+    st.rounds.push(pairUp(r.map(winner))); st.stage++;
+  }
+  function cupMy() { return st.out || st.champ !== null ? null : st.rounds[st.stage].find((m) => m.a === st.club || m.b === st.club); }
+  function cupRecord(g, o) {
+    const m = cupMy(); if (!m) return '';
+    const home = m.a === st.club;
+    m.ga = home ? g : o; m.gb = home ? o : g;
+    let note = '';
+    if (g === o) { const [x, y] = pens(); m.pa = home ? x : y; m.pb = home ? y : x; note = `Серія пенальті ${x}:${y}. `; }
+    const won = winner(m) === st.club, stage = st.stage;
+    playRound(st.rounds[stage]); nextStage();
+    if (!won) { st.out = true; while (st.champ === null) { playRound(st.rounds[st.stage]); nextStage(); } }
+    note += won ? (stage === 2 ? 'Ви виграли Кубок! 🏆' : `Ви проходите у ${STAGES[stage + 1].toLowerCase()}!`) : `Ви вибули: ${STAGES[stage].toLowerCase()}.`;
+    st.last = note; return note;
+  }
+  function cupView() {
+    const my = cupMy();
+    let sub;
+    if (st.champ === st.club) sub = 'Ви — володар Кубка! 🏆';
+    else if (st.champ !== null) sub = `Кубок виграв ${CLUBS[st.champ].name}. ${st.last}`;
+    else sub = `${STAGES[st.stage]} · суперник: ${CLUBS[my.a === st.club ? my.b : my.a].name}`;
+    const card = (m) => {
+      const row = (i, g, p) => `<div class="br-row${m.ga !== null && winner(m) === i ? ' win' : ''}">${tag(i, i === st.club)}<b>${g === null ? '' : g}${p !== null ? `<small>(${p})</small>` : ''}</b></div>`;
+      return `<div class="br-card">${row(m.a, m.ga, m.pa)}${row(m.b, m.gb, m.pb)}</div>`;
+    };
+    let html = '<div class="bracket">';
+    for (let r = 0; r < 3; r++) {
+      const ms = st.rounds[r] || Array.from({ length: 4 >> r }, () => null);
+      html += `<div class="br-col"><div class="br-h">${STAGES[r]}</div><div class="br-list">${ms.map((m) => (m ? card(m) : '<div class="br-card empty"><div class="br-row">—</div><div class="br-row">—</div></div>')).join('')}</div></div>`;
+    }
+    html += `<div class="br-col champ"><div class="br-h">КУБОК</div><div class="br-list"><div class="cup">🏆</div>${st.champ !== null ? tag(st.champ, st.champ === st.club) : ''}</div></div></div>`;
+    return { title: 'КУБОК ГОЛЕАДОРА', sub, html, play: my ? 'ГРАТИ МАТЧ' : 'НОВИЙ ТУРНІР' };
+  }
+
+  // ── Кар'єра: сезон ліги з 10 клубів, кожен з кожним ──
+  function roundRobin(n) {
+    const ids = [...Array(n).keys()], rounds = [];
+    for (let r = 0; r < n - 1; r++) {
+      const rd = []; for (let i = 0; i < n / 2; i++) { const a = ids[i], b = ids[n - 1 - i]; rd.push(r % 2 ? [b, a] : [a, b]); }
+      rounds.push(rd); ids.splice(1, 0, ids.pop());
+    }
+    return shuffle(rounds);
+  }
+  const rank = (club) => CLUBS.map((_, i) => i).sort((a, b) => rt(b) - rt(a)).indexOf(club) + 1;
+  function newCareer(club, prev) {
+    const s = { club, season: 1, round: 0, fixtures: roundRobin(CLUBS.length), table: CLUBS.map(() => ({ p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 })), scorers: {}, titles: 0, boost: 0, history: [], last: '', news: [] };
+    if (prev) Object.assign(s, { season: prev.season + 1, titles: prev.titles, boost: prev.boost, history: prev.history });
+    const k = (st = s, rank(club));
+    s.target = k <= 2 ? 1 : k <= 4 ? 3 : k <= 7 ? 5 : 7;
+    s.news = [prev ? `Сезон ${s.season} стартує. ${prev.verdict}` : `Вас призначено тренером клубу ${CLUBS[club].name}!`, `Правління чекає: ${targetText(s.target)}.`];
+    return s;
+  }
+  const targetText = (t) => (t === 1 ? 'чемпіонство' : t === 3 ? 'місце в трійці' : `не нижче ${t}-го місця`);
+  const pts = (r) => r.w * 3 + r.d;
+  function order() { return st.table.map((r, i) => i).sort((a, b) => pts(st.table[b]) - pts(st.table[a]) || (st.table[b].gf - st.table[b].ga) - (st.table[a].gf - st.table[a].ga) || st.table[b].gf - st.table[a].gf); }
+  function apply(a, b, ga, gb) {
+    const A = st.table[a], B = st.table[b];
+    A.p++; B.p++; A.gf += ga; A.ga += gb; B.gf += gb; B.ga += ga;
+    if (ga > gb) { A.w++; B.l++; } else if (ga < gb) { B.w++; A.l++; } else { A.d++; B.d++; }
+  }
+  function carMy() { return st.round >= st.fixtures.length ? null : st.fixtures[st.round].find((f) => f.includes(st.club)); }
+  function carRecord(g, o, names) {
+    const f = carMy(); if (!f) return '';
+    const opp = f[0] === st.club ? f[1] : f[0];
+    apply(st.club, opp, g, o);
+    for (const n of names) st.scorers[n] = (st.scorers[n] || 0) + 1;
+    for (const x of st.fixtures[st.round]) if (x !== f) { const [ga, gb] = sim(x[0], x[1]); apply(x[0], x[1], ga, gb); }
+    st.round++;
+    const pos = order().indexOf(st.club) + 1;
+    const res = g > o ? 'Перемога' : g < o ? 'Поразка' : 'Нічия';
+    const top = Object.entries(st.scorers).sort((a, b) => b[1] - a[1])[0];
+    const vs = g > o ? 'над' : g < o ? 'від' : 'з';
+    st.news = [`${res} ${g}:${o} ${vs} ${CLUBS[opp].name}.`, `Ви на ${pos}-му місці.`];
+    if (names.length >= 2) st.news.push(`${names[0]} — герой матчу!`);
+    else if (top) st.news.push(`Найкращий бомбардир: ${top[0]} (${top[1]}).`);
+    let note = `${res}! Тур ${st.round} з ${st.fixtures.length}. Ви на ${pos}-му місці.`;
+    if (st.round >= st.fixtures.length) {
+      st.history.push({ season: st.season, pos });
+      if (pos === 1) st.titles++;
+      const ok = pos <= st.target;
+      if (ok) st.boost = Math.min(st.boost + 2, 10);
+      st.verdict = pos === 1 ? 'Ви чемпіони! Правління дало гроші на нових гравців.' : ok ? 'Правління задоволене і посилює склад.' : 'Правління незадоволене результатом.';
+      note = pos === 1 ? 'ВИ ЧЕМПІОНИ! 🏆' : `Сезон завершено: ${pos}-е місце. ${st.verdict}`;
+      st.news = [note, `Мета була: ${targetText(st.target)}.`];
+    }
+    st.last = note; return note;
+  }
+  function carView() {
+    const f = carMy(), done = !f;
+    const opp = f ? (f[0] === st.club ? f[1] : f[0]) : null;
+    const sub = done ? (order()[0] === st.club ? 'Ви чемпіони сезону! 🏆' : `Сезон завершено: ${order().indexOf(st.club) + 1}-е місце`)
+      : `Тур ${st.round + 1} з ${st.fixtures.length} · суперник: ${CLUBS[opp].name}`;
+    let html = '<div class="career"><table class="lg"><tr><th>#</th><th class="l">Клуб</th><th>І</th><th>В</th><th>Н</th><th>П</th><th>М</th><th>О</th></tr>';
+    order().forEach((i, k) => {
+      const r = st.table[i];
+      html += `<tr class="${i === st.club ? 'me' : ''}${k === 0 ? ' first' : ''}"><td>${k + 1}</td><td class="l">${tag(i, i === st.club)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}:${r.ga}</td><td><b>${pts(r)}</b></td></tr>`;
+    });
+    html += '</table><div class="news"><div class="br-h">НОВИНИ</div>' + st.news.map((n) => `<p>${n}</p>`).join('');
+    html += `<div class="br-h">КЛУБ</div><p>Мета: ${targetText(st.target)}</p><p>Трофеї: ${'🏆'.repeat(st.titles) || '—'}</p>`;
+    if (st.boost) html += `<p>Підсилення складу: +${st.boost}</p>`;
+    html += '</div></div>';
+    return { title: `КАР'ЄРА · СЕЗОН ${st.season}`, sub, html, play: done ? 'НОВИЙ СЕЗОН' : 'ГРАТИ ТУР' };
+  }
+
+  function render() {
+    const v = mode === 'cup' ? cupView() : carView();
+    $('hubTitle').textContent = v.title; $('hubSub').textContent = v.sub;
+    $('hubBody').innerHTML = v.html; $('hubPlay').textContent = v.play;
+  }
+  function open() {
+    mode = settings.mode;
+    st = load(mode);
+    if (!st) { st = mode === 'cup' ? newCup(settings.home) : newCareer(settings.home); save(mode, st); }
+    ['menu', 'end', 'pause', 'hud'].forEach((id) => $(id).classList.add('hidden'));
+    $('touch').classList.add('hidden');
+    if (!demo) startMatch(true);
+    render(); $('hub').classList.remove('hidden');
+  }
+  function playNext() {
+    if (mode === 'cup') {
+      const m = cupMy();
+      if (!m) { st = newCup(st.club); save(mode, st); render(); return; }
+      settings.home = st.club; settings.away = m.a === st.club ? m.b : m.a;
+    } else {
+      const f = carMy();
+      if (!f) { st = newCareer(st.club, st); save(mode, st); render(); return; }
+      settings.home = st.club; settings.away = f[0] === st.club ? f[1] : f[0];
+    }
+    play();
+  }
+  function record(g, o, names) {
+    mode = settings.mode; st = load(mode); if (!st) return '';
+    const n = mode === 'cup' ? cupRecord(g, o) : carRecord(g, o, names);
+    save(mode, st); return n;
+  }
+  function reset() {
+    if (!confirm('Почати заново? Поточний прогрес буде втрачено.')) return;
+    st = mode === 'cup' ? newCup(settings.home) : newCareer(settings.home); save(mode, st); render();
+  }
+  $('hubPlay').onclick = playNext; $('hubReset').onclick = reset;
+  $('hubMenu').onclick = () => { $('hub').classList.add('hidden'); toMenu(); };
+  return { open, record, get state() { return st; } };
+})();
 
 (() => {   // сенсорне керування: джойстик з'являється там, де торкнувся палець (ліва половина екрана)
   const zone = $('stickZone'), stick = $('stick'), knob = $('knob');
@@ -2148,7 +2352,7 @@ setTimeout(boot, 20000);   // якщо моделі довго вантажат�
 
 window.GOLEADOR = {
   get state() { return state; }, get score() { return score; }, get ball() { return ball; }, get players() { return players; },
-  get ctrl() { return ctrl; }, get clock() { return clock; }, get passTarget() { return passTarget; }, step, startMatch, play, settings, STATS, shootAt,
+  get ctrl() { return ctrl; }, get clock() { return clock; }, get passTarget() { return passTarget; }, get Modes() { return Modes; }, endMatch, get score() { return score; }, step, startMatch, play, settings, STATS, shootAt,
   setCam(m) { camMode = m; }, camera, render: () => { for (const p of players) animatePlayer(p); renderer.render(scene, camera); },
 };
 })();

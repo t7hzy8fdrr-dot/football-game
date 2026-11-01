@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>ГОЛЕАДОР — футбол у браузері</title>
-<link rel="stylesheet" href="style.css?v=9" onerror="this.onerror=null;this.href='style.css'">
+<link rel="stylesheet" href="style.css?v=10" onerror="this.onerror=null;this.href='style.css'">
 </head>
 <body>
 <div id="view"></div>
@@ -34,15 +34,23 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <div class="logo">ГОЛЕАДОР</div>
-    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 9</span></div>
+    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 10</span></div>
+    <div class="opt">
+      <div class="choices" data-opt="mode">
+        <button data-v="match" class="on">Матч</button>
+        <button data-v="cup">Турнір</button>
+        <button data-v="career">Кар'єра</button>
+      </div>
+    </div>
     <div class="opt">
       <div class="label">Ваша команда</div>
       <div class="clubs" id="clubHome"></div>
     </div>
-    <div class="opt">
+    <div class="opt" id="optAway">
       <div class="label">Суперник</div>
       <div class="clubs" id="clubAway"></div>
     </div>
+    <div class="row2">
     <div class="opt">
       <div class="label">Складність</div>
       <div class="choices" data-opt="diff">
@@ -58,6 +66,7 @@
         <button data-v="4" class="on">4 хв</button>
         <button data-v="6">6 хв</button>
       </div>
+    </div>
     </div>
     <button id="play" class="big">ГРАТИ</button>
     <div class="help">
@@ -83,8 +92,19 @@
   <div class="panel small">
     <div class="logo smaller" id="endTitle">ПЕРЕМОГА!</div>
     <div class="final" id="endScore">0 : 0</div>
+    <div class="end-note hidden" id="endNote"></div>
     <button id="again" class="big">ЩЕ МАТЧ</button>
     <button id="toMenu2" class="ghost">Меню</button>
+  </div>
+</div>
+
+<div id="hub" class="overlay hidden">
+  <div class="panel wide">
+    <div class="logo smaller" id="hubTitle">КУБОК</div>
+    <div class="hub-sub" id="hubSub"></div>
+    <div id="hubBody"></div>
+    <button id="hubPlay" class="big">ГРАТИ МАТЧ</button>
+    <div class="hub-btns"><button id="hubMenu" class="ghost">Меню</button><button id="hubReset" class="ghost">Почати заново</button></div>
   </div>
 </div>
 
@@ -120,7 +140,7 @@
     setTimeout(function () { if (!window.__started) show('Завантаження триває задовго. Оновіть сторінку.'); }, 25000);
   })();
 </script>
-<script src="lib/three.bundle.js?v=9" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
-<script src="game.js?v=9" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
+<script src="lib/three.bundle.js?v=10" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
+<script src="game.js?v=10" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
 </body>
 </html>
