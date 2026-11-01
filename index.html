@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07090d">
+<meta name="apple-mobile-web-app-title" content="Голеадор">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>ГОЛЕАДОР — футбол у браузері</title>
+<link rel="stylesheet" href="style.css?v=7" onerror="this.onerror=null;this.href='style.css'">
+</head>
+<body>
+<div id="view"></div>
+<div id="vignette"></div>
+<div id="hud" class="hidden">
+  <div id="board">
+    <div class="b-logo">Г</div>
+    <div class="b-team"><i style="background:#d7263d"></i>ЛЕВ</div>
+    <div class="b-score" id="bScore">0–0</div>
+    <div class="b-team">ВОВ<i style="background:#2a6be0"></i></div>
+    <div class="b-time" id="bTime">00:00</div>
+  </div>
+  <canvas id="minimap" width="220" height="146"></canvas>
+  <div id="power"><div id="powerFill"></div></div>
+</div>
+<div id="banner"><div class="b-main"></div><div class="b-sub"></div></div>
+<div id="loading">Завантаження стадіону…</div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <div class="logo">ГОЛЕАДОР</div>
+    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 7</span></div>
+    <div class="teams">
+      <span class="team"><i style="background:#d7263d"></i>ЛЕВИ <small>(ви)</small></span>
+      <span class="vs">проти</span>
+      <span class="team"><i style="background:#1f5fd6"></i>ВОВКИ</span>
+    </div>
+    <div class="opt">
+      <div class="label">Складність</div>
+      <div class="choices" data-opt="diff">
+        <button data-v="easy">Легко</button>
+        <button data-v="normal" class="on">Нормально</button>
+        <button data-v="hard">Складно</button>
+      </div>
+    </div>
+    <div class="opt">
+      <div class="label">Тривалість матчу</div>
+      <div class="choices" data-opt="mins">
+        <button data-v="2">2 хв</button>
+        <button data-v="4" class="on">4 хв</button>
+        <button data-v="6">6 хв</button>
+      </div>
+    </div>
+    <button id="play" class="big">ГРАТИ</button>
+    <div class="help">
+      <div><b>Стрілки</b> або <b>WASD</b> — бігти</div>
+      <div><b>Shift</b> — прискорення</div>
+      <div><b>Пробіл</b> / <b>J</b> — пас (без м'яча — змінити гравця)</div>
+      <div><b>K</b> / <b>X</b> — удар (затисніть для сили; без м'яча — відбір)</div>
+      <div><b>C</b> — камера · <b>P</b> — пауза · <b>M</b> — звук</div>
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel small">
+    <div class="logo smaller">ПАУЗА</div>
+    <button id="resume" class="big">ПРОДОВЖИТИ</button>
+    <button id="toMenu1" class="ghost">Вийти в меню</button>
+  </div>
+</div>
+
+<div id="end" class="overlay hidden">
+  <div class="panel small">
+    <div class="logo smaller" id="endTitle">ПЕРЕМОГА!</div>
+    <div class="final" id="endScore">0 : 0</div>
+    <button id="again" class="big">ЩЕ МАТЧ</button>
+    <button id="toMenu2" class="ghost">Меню</button>
+  </div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="stickZone"></div>
+  <div id="stick"><div id="knob"></div></div>
+  <div id="btns">
+    <button id="tSprint">⚡</button>
+    <button id="tPass">ПАС</button>
+    <button id="tShoot">УДАР</button>
+  </div>
+  <button id="tPause">❚❚</button>
+  <button id="tFull" title="На весь екран">⛶</button>
+  <button id="tCam" title="Камера">🎥</button>
+</div>
+
+<script>
+  // якщо щось піде не так — показати причину на екрані, а не «вічне завантаження»
+  (function () {
+    function show(msg) {
+      var el = document.getElementById('loading'); if (!el) return;
+      el.classList.remove('hidden');
+      el.innerHTML = '<div style="max-width:90vw;text-align:center;line-height:1.5">Гра не запустилась 😕<br><small style="color:#c7d2e4;font-weight:500">' + String(msg).replace(/</g, '&lt;') + '</small></div>';
+    }
+    window.__showErr = show;
+    window.addEventListener('error', function (e) { if (!window.__started) show((e.message || 'помилка') + (e.lineno ? ' (рядок ' + e.lineno + ')' : '')); });
+    setTimeout(function () { if (!window.__started) show('Завантаження триває задовго. Оновіть сторінку.'); }, 25000);
+  })();
+</script>
+<script src="lib/three.bundle.js?v=7" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
+<script src="game.js?v=7" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
+</body>
+</html>
