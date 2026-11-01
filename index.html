@@ -11,11 +11,12 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>ГОЛЕАДОР — футбол у браузері</title>
-<link rel="stylesheet" href="style.css?v=8" onerror="this.onerror=null;this.href='style.css'">
+<link rel="stylesheet" href="style.css?v=9" onerror="this.onerror=null;this.href='style.css'">
 </head>
 <body>
 <div id="view"></div>
 <div id="vignette"></div>
+<div id="names"></div>
 <div id="hud" class="hidden">
   <div id="board">
     <div class="b-logo">Г</div>
@@ -33,7 +34,7 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <div class="logo">ГОЛЕАДОР</div>
-    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 8</span></div>
+    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 9</span></div>
     <div class="opt">
       <div class="label">Ваша команда</div>
       <div class="clubs" id="clubHome"></div>
@@ -64,6 +65,7 @@
       <div><b>Shift</b> — прискорення</div>
       <div><b>Пробіл</b> / <b>J</b> — пас (без м'яча — змінити гравця)</div>
       <div><b>K</b> / <b>X</b> — удар (затисніть для сили; без м'яча — відбір)</div>
+      <div><b>V</b> — пас на хід · <b>B</b> — навіс</div>
       <div><b>C</b> — камера · <b>P</b> — пауза · <b>M</b> — звук</div>
     </div>
   </div>
@@ -91,8 +93,14 @@
   <div id="stick"><div id="knob"></div></div>
   <div id="btns">
     <button id="tSprint">⚡</button>
-    <button id="tPass">ПАС</button>
-    <button id="tShoot">УДАР</button>
+    <div class="bcol">
+      <button id="tThrough">НА ХІД</button>
+      <button id="tPass">ПАС</button>
+    </div>
+    <div class="bcol">
+      <button id="tCross">НАВІС</button>
+      <button id="tShoot">УДАР</button>
+    </div>
   </div>
   <button id="tPause">❚❚</button>
   <button id="tFull" title="На весь екран">⛶</button>
@@ -112,7 +120,7 @@
     setTimeout(function () { if (!window.__started) show('Завантаження триває задовго. Оновіть сторінку.'); }, 25000);
   })();
 </script>
-<script src="lib/three.bundle.js?v=8" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
-<script src="game.js?v=8" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
+<script src="lib/three.bundle.js?v=9" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
+<script src="game.js?v=9" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
 </body>
 </html>
