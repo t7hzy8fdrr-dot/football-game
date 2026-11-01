@@ -180,6 +180,7 @@ function crowdMaterial(color) {
   return m;
 }
 const flags = [];
+let crowd = null;
 function buildStadium() {
   const ROWS = isMobile ? 16 : 22, RD = 0.85, RH = 0.5, GAP = 9.5;
   const standMat = new T3.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.95 });
@@ -242,6 +243,7 @@ function buildStadium() {
     heads.setColorAt(i, c.setHex(SKINS[(Math.random() * SKINS.length) | 0]));
   }
   scene.add(bodies); scene.add(heads);
+  crowd = { seats, cubes: [bodies, heads] };
 
   const glowTex = canvasTex(128, 128, (g) => {
     const rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -256,6 +258,148 @@ function buildStadium() {
     const spr = new T3.Sprite(new T3.SpriteMaterial({ map: glowTex, color: 0xfff3d0, transparent: true, depthWrite: false, blending: T3.AdditiveBlending, fog: false }));
     spr.scale.set(26, 26, 1); spr.position.copy(V(x, y, 43)); scene.add(spr);
   }
+}
+
+// ── Глядачі: фігури людей (рендер моделі в атлас) на площинах замість кубиків
+function buildCrowdSprites() {
+  if (!HUMAN || !crowd) return;
+  const COLS = 8, ROWS = 4, CW = 128, CH = 256;
+  const rt = new T3.WebGLRenderTarget(COLS * CW, ROWS * CH, { generateMipmaps: true, minFilter: T3.LinearMipmapLinearFilter });
+  const sc = new T3.Scene();
+  sc.add(new T3.HemisphereLight(0xdfe8ff, 0x3a3020, 0.9));
+  const dl = new T3.DirectionalLight(0xffffff, 1.4); dl.position.set(1, 3, 4); sc.add(dl);
+  const cam = new T3.OrthographicCamera(-0.5, 0.5, 1.95, -0.05, 0.1, 20); cam.position.set(0, 0, 5); cam.lookAt(0, 0, 0);
+  // половина вболіває за червоних, половина за синіх, решта — у своєму
+  const shirts = [0xc8102e, 0xd7263d, 0x1f56c8, 0x2a6be0, 0xf2f2f2, 0x2c3e50, 0x222222, 0xf1c40f, 0xc8102e, 0x1f56c8, 0x7f8c8d, 0x16a085, 0xd35400, 0x8e44ad, 0xc8102e, 0x1f56c8];
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new T3.Color()), prevA = renderer.getClearAlpha();
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+  for (let i = 0; i < COLS * ROWS; i++) {
+    const v = i % 16, cheer = i >= 16;
+    const fake = { team: 0, skinLight: v % 3 !== 0, skinTint: [0xffffff, 0xf3e3d6, 0xe8d2c0][v % 3], boot: 0x222222 };
+    const g = T3.SkeletonUtils.clone(HUMAN.scene);
+    let body = null;
+    g.traverse((o) => { if (o.isSkinnedMesh) { o.frustumCulled = false; if (o.name === 'SuperHero_Male') { body = o; o.material = kitMaterial(fake, { shirt: shirts[v], shorts: [0x2b3a55, 0x1d1d1d, 0x4a4a4a][v % 3], socks: 0x222222 }); } } });
+    const head = body.skeleton.getBoneByName('Head');
+    g.updateMatrixWorld(true);
+    if (v % 4 !== 3) {   // зачіска
+      const src = HUMAN.hair[v % 2 ? 'Hair_SimpleParted' : 'Hair_Buzzed'];
+      if (src) { const h = new T3.Mesh(src.geometry, hairMat(src.material, HAIRS[v % HAIRS.length])); h.matrixAutoUpdate = false; h.matrix.copy(head.matrixWorld.clone().invert().multiply(g.matrixWorld)); head.add(h); }
+    }
+    const mixer = new T3.AnimationMixer(g);
+    mixer.clipAction(HUMAN.clips.Idle_Loop).play(); mixer.setTime(v * 0.37);
+    g.updateMatrixWorld(true);
+    if (cheer) {   // руки вгору
+      const B = (n) => body.skeleton.getBoneByName(n);
+      boneRot(B('upperarm_l'), AX_Z, 2.3 + (v % 3) * 0.15, g); g.updateMatrixWorld(true);
+      boneRot(B('upperarm_r'), AX_Z, -2.3 - (v % 2) * 0.2, g); g.updateMatrixWorld(true);
+      boneRot(B('lowerarm_l'), AX_Z, 0.4, g); boneRot(B('lowerarm_r'), AX_Z, -0.4, g);
+    }
+    g.rotation.y = (v % 5 - 2) * 0.12;
+    sc.add(g);
+    const cx = i % COLS, cy = (i / COLS) | 0;
+    rt.viewport.set(cx * CW, cy * CH, CW, CH); rt.scissor.set(cx * CW, cy * CH, CW, CH); rt.scissorTest = true;
+    renderer.setRenderTarget(rt);
+    renderer.render(sc, cam);
+    sc.remove(g);
+  }
+  rt.scissorTest = false; rt.viewport.set(0, 0, COLS * CW, ROWS * CH);
+  renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevA);
+  const seats = crowd.seats, n = seats.length;
+  const geo = new T3.PlaneGeometry(0.62, 1.2); geo.translate(0, 0.52, 0);
+  const cell = new Float32Array(n), ph = new Float32Array(n);
+  for (let i = 0; i < n; i++) { cell[i] = (Math.random() * 16) | 0; ph[i] = Math.random(); }
+  geo.setAttribute('aCell', new T3.InstancedBufferAttribute(cell, 1));
+  geo.setAttribute('aPhase', new T3.InstancedBufferAttribute(ph, 1));
+  const mat = new T3.MeshBasicMaterial({ map: rt.texture, alphaTest: 0.42, side: T3.DoubleSide });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = crowdUniforms.uTime; sh.uniforms.uJump = crowdUniforms.uJump;
+    sh.vertexShader = 'attribute float aCell;\nattribute float aPhase;\nuniform float uTime;\nuniform float uJump;\n' + sh.vertexShader
+      .replace('#include <uv_vertex>', `#include <uv_vertex>
+        float cheer = step(0.5, uJump) * step(0.25, fract(aPhase * 5.3));
+        float cc = aCell + 16.0 * cheer;
+        vUv = (uv + vec2(mod(cc, 8.0), floor(cc / 8.0))) / vec2(8.0, 4.0);`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float bb = abs(sin(uTime * (1.6 + uJump * 6.0) + aPhase * 6.283));
+        transformed.y += bb * (0.025 + uJump * 0.4 * step(0.35, fract(aPhase * 7.3)));`);
+  };
+  const mesh = new T3.InstancedMesh(geo, mat, n);
+  const m4 = new T3.Matrix4(), q = new T3.Quaternion(), s3 = new T3.Vector3(), c = new T3.Color(), up = new T3.Vector3(0, 1, 0);
+  for (let i = 0; i < n; i++) {
+    const [x, y, z, ang] = seats[i];
+    q.setFromAxisAngle(up, ang + rand(-0.15, 0.15));
+    const k = rand(0.92, 1.08); s3.set(k, k, 1);
+    m4.compose(new T3.Vector3(x + rand(-0.05, 0.05), y, z), q, s3);
+    mesh.setMatrixAt(i, m4);
+    const b = rand(0.62, 0.9); mesh.setColorAt(i, c.setRGB(b, b, b));
+  }
+  scene.add(mesh);
+  for (const cb of crowd.cubes) { scene.remove(cb); cb.geometry.dispose(); }
+  buildStandFlags();
+}
+// Великі прапори вболівальників на трибунах
+function buildStandFlags() {
+  const mk = (a, b, text) => canvasTex(256, 160, (g) => {
+    g.fillStyle = a; g.fillRect(0, 0, 256, 160);
+    g.fillStyle = b; g.fillRect(0, 56, 256, 48);
+    g.fillStyle = a === '#ffffff' ? '#111' : '#fff'; g.font = '900 34px Segoe UI, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 81);
+  });
+  const texs = [mk('#c8102e', '#ffffff', 'ЛЕВИ'), mk('#1f56c8', '#ffffff', 'ВОВКИ'), mk('#c8102e', '#ffd34d', 'ВПЕРЕД'), mk('#1f56c8', '#ffd34d', 'ВОВКИ')];
+  const geo = new T3.PlaneGeometry(3.4, 2.1, 14, 6);
+  for (let i = 0; i < 14; i++) {
+    const far = i < 9;
+    const x = far ? 8 + i * 11 + rand(-2, 2) : (i % 2 ? -14.5 : L + 14.5);
+    const y = far ? -9.5 - rand(4, 12) : W / 2 + (i - 11) * 9;
+    const t = texs[(x < L / 2 ? 0 : 1) + (Math.random() < 0.3 ? 2 : 0)];
+    const m = new T3.MeshLambertMaterial({ map: t, side: T3.DoubleSide });
+    const ph = Math.random() * 6;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = crowdUniforms.uTime;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        float wx = (position.x + 1.7) / 3.4;
+        transformed.z += sin(position.x * 2.2 - uTime * 4.0 + ${ph.toFixed(2)}) * 0.22 * wx;
+        transformed.y += sin(position.x * 1.5 - uTime * 3.0 + ${ph.toFixed(2)}) * 0.08 * wx;`);
+    };
+    const fl = new T3.Mesh(geo, m);
+    const yy = far ? -9.5 - (-9.5 - y) : y;
+    const dist = far ? -9.5 - y : 0;
+    fl.position.copy(V(x, far ? y : y, 0.9 + (far ? dist / 0.85 * 0.5 : rand(2, 6)) + 2.2));
+    fl.rotation.y = far ? 0 : (x < 0 ? Math.PI / 2 : -Math.PI / 2);
+    fl.rotation.z = rand(-0.15, 0.15);
+    scene.add(fl);
+  }
+}
+
+// ── Великі екрани на стадіоні: показують матч з іншої камери
+const screens = { rt: null, cam: null, n: 0 };
+function buildScreens() {
+  const rt = new T3.WebGLRenderTarget(isMobile ? 320 : 480, isMobile ? 180 : 270);
+  screens.rt = rt; screens.cam = new T3.PerspectiveCamera(30, 16 / 9, 0.5, 400);
+  const frameMat = new T3.MeshStandardMaterial({ color: 0x14171f, roughness: 0.5, metalness: 0.4 });
+  const scrMat = new T3.MeshBasicMaterial({ map: rt.texture, toneMapped: false });
+  for (const x of [17, L - 17]) {
+    const g = new T3.Group();
+    const fr = new T3.Mesh(new T3.BoxGeometry(17, 9.9, 0.6), frameMat); g.add(fr);
+    const sc = new T3.Mesh(new T3.PlaneGeometry(16, 9), scrMat); sc.position.z = 0.31; g.add(sc);
+    const band = new T3.Mesh(new T3.PlaneGeometry(17, 1.4), new T3.MeshBasicMaterial({ map: canvasTex(512, 42, (c, w, h) => {
+      c.fillStyle = '#0f1c3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd34d'; c.font = '900 30px Segoe UI, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('ЛЕВИ  —  ВОВКИ', w / 2, h / 2 + 1);
+    }) }));
+    band.position.set(0, -5.75, 0.31); g.add(band);
+    g.position.copy(V(x, -6.5, 24.3)); g.rotation.x = 0.1;
+    scene.add(g);
+  }
+}
+function updateScreens() {
+  if (!screens.rt || demo || paused) return;
+  if (++screens.n % (isMobile ? 4 : 3)) return;
+  const c = screens.cam, dir = ball.x < L / 2 ? -1 : 1;
+  // камера «за воротами», ближче до м'яча
+  c.position.copy(V(clamp(ball.x - dir * 16, -2, L + 2), clamp(ball.y + (ball.y < W / 2 ? -9 : 9), -6, W + 6), 6.5));
+  c.lookAt(V(ball.x + dir * 3, ball.y, 0.8));
+  const auto = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false;
+  const vis = ctrlRing.visible, av = aimArrow.visible; ctrlRing.visible = ctrlArrow.visible = aimArrow.visible = false;
+  renderer.setRenderTarget(screens.rt); renderer.render(scene, c); renderer.setRenderTarget(null);
+  renderer.shadowMap.autoUpdate = auto; ctrlRing.visible = ctrlArrow.visible = vis; aimArrow.visible = av;
 }
 
 // ── LED-борти з рекламою, що біжить
@@ -548,7 +692,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=5'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=6'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -598,26 +742,39 @@ function kitNumTex(n, color) {
     g.fillStyle = color; g.fillText(n, 64, 68);
   }));
 }
-function kitMaterial(p) {
-  const T = TEAMS[p.team], m = HUMAN.bodyMat.clone();
+function kitMaterial(p, cols) {
+  const T = TEAMS[p.team] || TEAMS[0], m = HUMAN.bodyMat.clone();
   m.map = p.skinLight ? HUMAN.light : HUMAN.dark;
   m.roughness = 0.62; m.metalness = 0;
   m.color.set(p.skinTint);
   const col = (c) => ({ value: new T3.Color(c) });
   const u = {
-    uShirt: col(p.gk ? T.gk : T.shirt), uShorts: col(p.gk ? 0x1d1d1d : T.shorts), uSocks: col(p.gk ? 0x1d1d1d : T.socks), uBoots: col(p.boot),
-    uNum: { value: kitNumTex(p.num, p.gk ? '#ffffff' : T.num) },
+    uShirt: col(cols ? cols.shirt : p.gk ? T.gk : T.shirt), uShorts: col(cols ? cols.shorts : p.gk ? 0x1d1d1d : T.shorts),
+    uSocks: col(cols ? cols.socks : p.gk ? 0x1d1d1d : T.socks), uBoots: col(p.boot),
+    uNum: { value: kitNumTex(cols ? '' : p.num, p.gk ? '#ffffff' : T.num) },
+    uTrim: col(cols ? cols.shirt : p.gk ? T.gkTrim : T.trim), uDetail: { value: cols ? 0 : 1 },
   };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = 'attribute vec4 kit;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\nvKit = kit; vBind = position; vBindN = normal;\ntransformed += normal * (0.02 * kit.x + 0.028 * kit.y + 0.005 * kit.z + 0.009 * kit.w);');
-    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots, uTrim;\nuniform float uDetail;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
       .replace('#include <map_fragment>', `#include <map_fragment>
         float km = clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0);
         vec3 kc = (uShirt * vKit.x + uShorts * vKit.y + uSocks * vKit.z + uBoots * vKit.w) / max(km, 0.001);
         float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         vec3 fab = kc * (0.93 + 0.12 * (lum - 0.45));
+        if (uDetail > 0.5) {   // деталі форми: комір, манжети, смуги на шортах, номер спереду
+          float ax = abs(vBind.x);
+          if (vKit.x > 0.5 && vBind.y > 1.495 && ax < 0.13) fab = uTrim * 0.95;
+          if (vKit.x > 0.5 && ax > 0.355) fab = uTrim * 0.95;
+          if (vKit.y > 0.5 && abs(vBindN.x) > 0.72 && vBind.y > 0.72) fab = uTrim;
+          if (vKit.z > 0.5 && vBind.y > 0.40) fab = uTrim;
+          if (vBindN.z > 0.35 && vKit.x > 0.5) {
+            vec2 fuv = vec2((vBind.x + 0.055) / 0.11, (vBind.y - 1.27) / 0.11);
+            if (fuv.x > 0.0 && fuv.x < 1.0 && fuv.y > 0.0 && fuv.y < 1.0) { vec4 nc = texture2D(uNum, fuv); fab = mix(fab, nc.rgb, nc.a); }
+          }
+        }
         if (vBindN.z < -0.2 && vKit.x > 0.5) {   // номер на спині
           vec2 nuv = vec2((0.15 - vBind.x) / 0.30, (vBind.y - 1.10) / 0.30);
           if (nuv.x > 0.0 && nuv.x < 1.0 && nuv.y > 0.0 && nuv.y < 1.0) { vec4 nc = texture2D(uNum, nuv); fab = mix(fab, nc.rgb, nc.a); }
@@ -626,7 +783,7 @@ function kitMaterial(p) {
       .replace('#include <normal_fragment_maps>', T3.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', 'mapN.xy *= normalScale * (1.0 - 0.7 * clamp(vKit.x + vKit.y, 0.0, 1.0));'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, vKit.w > 0.5 ? 0.35 : 0.8, clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0));');
   };
-  m.customProgramCacheKey = () => 'kit-v1';
+  m.customProgramCacheKey = () => 'kit-v2';
   return m;
 }
 const hairMatCache = {};
@@ -1624,11 +1781,17 @@ function step(dt) {
 const camT = new T3.Vector3(), camP = new T3.Vector3(0, 30, 70);
 function updateCamera(dt, now) {
   const look = V(ball.x + ball.vx * 0.35, ball.y + ball.vy * 0.25, 0);
-  let pos;
+  let pos, closeUp = false;
   if (demo) {   // повільний обліт стадіону в меню
     const a = now / 14000;
     look.set(Math.sin(a * 0.7) * 12, 0, 0);
     pos = new T3.Vector3(Math.sin(a) * 48, 24 + Math.sin(a * 0.5) * 5, Math.cos(a) * 38);
+  } else if (state === 'goal' && stateT < 3.5 && ball.last && ball.last.team === lastGoalTeam) {
+    // крупний план автора гола
+    const p = ball.last, mv = hyp(p.vx, p.vy) > 1 ? Math.atan2(p.vy, p.vx) : p.face, a = mv + 0.45 + (3.5 - stateT) * 0.18;
+    look.copy(V(p.x + p.vx * 0.3, p.y + p.vy * 0.3, 1.2));
+    pos = V(p.x + p.vx * 0.5 + Math.cos(a) * 4.6, p.y + p.vy * 0.5 + Math.sin(a) * 4.6, 1.8);
+    closeUp = true;
   } else if (camModeEff() === 2 && humanTeam >= 0) {
     const dir = TEAMS[humanTeam].dir, pt = isPortrait();
     look.copy(V(ball.x + dir * (pt ? 5 : 8), ball.y, 0));
@@ -1640,8 +1803,8 @@ function updateCamera(dt, now) {
     const back = isMobile ? 12 : 19, hgt = isMobile ? 6.6 : 9;   // на телефоні камера ближче — гравці більші
     pos = wide ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, hgt, Math.min(W / 2 + 7, look.z + back));
   }
-  const k = Math.min(1, dt * (demo ? 1 : 3.2));
-  camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : 2.5)));
+  const k = Math.min(1, dt * (demo ? 1 : closeUp ? 7 : 3.2));
+  camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : closeUp ? 5 : 2.5)));
   camera.position.copy(camP); camera.lookAt(camT);
   const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : isMobile ? 31 : 34;
   camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix();
@@ -1703,6 +1866,7 @@ function render(dt, now) {
       aimArrow.rotation.set(0, Math.atan2(Math.cos(a), Math.sin(a)), 0);
     }
   }
+  updateScreens();
   renderer.render(scene, camera);
   if (!demo) { updateHUD(); drawMinimap(); updatePowerBar(); }
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) bannerEl.classList.remove('show'); }
@@ -1808,7 +1972,7 @@ $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').o
   if (!canFullscreen()) full.classList.add('hidden');
   full.onclick = () => (document.fullscreenElement || document.webkitFullscreenElement ? exitFullscreen() : goFullscreen());
 })();
-buildPitch(); buildStadium(); buildBoards(); buildGoals(); buildBall();
+buildPitch(); buildStadium(); buildBoards(); buildGoals(); buildBall(); buildScreens();
 $('loading').textContent = 'Завантаження гравців…';
 let booted = false;
 function boot() {
@@ -1818,7 +1982,7 @@ function boot() {
   window.__started = true;
   requestAnimationFrame(frame);
 }
-loadHumans().then(boot);
+loadHumans().then(() => { try { buildCrowdSprites(); } catch (e) { console.warn('Глядачі: ', e); } boot(); });
 setTimeout(boot, 20000);   // якщо моделі довго вантажаться — грати з простими
 
 window.GOLEADOR = {
