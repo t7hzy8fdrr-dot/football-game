@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>ГОЛЕАДОР — футбол у браузері</title>
-<link rel="stylesheet" href="style.css?v=7" onerror="this.onerror=null;this.href='style.css'">
+<link rel="stylesheet" href="style.css?v=8" onerror="this.onerror=null;this.href='style.css'">
 </head>
 <body>
 <div id="view"></div>
@@ -33,11 +33,14 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <div class="logo">ГОЛЕАДОР</div>
-    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 7</span></div>
-    <div class="teams">
-      <span class="team"><i style="background:#d7263d"></i>ЛЕВИ <small>(ви)</small></span>
-      <span class="vs">проти</span>
-      <span class="team"><i style="background:#1f5fd6"></i>ВОВКИ</span>
+    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 8</span></div>
+    <div class="opt">
+      <div class="label">Ваша команда</div>
+      <div class="clubs" id="clubHome"></div>
+    </div>
+    <div class="opt">
+      <div class="label">Суперник</div>
+      <div class="clubs" id="clubAway"></div>
     </div>
     <div class="opt">
       <div class="label">Складність</div>
@@ -109,7 +112,7 @@
     setTimeout(function () { if (!window.__started) show('Завантаження триває задовго. Оновіть сторінку.'); }, 25000);
   })();
 </script>
-<script src="lib/three.bundle.js?v=7" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
-<script src="game.js?v=7" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
+<script src="lib/three.bundle.js?v=8" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
+<script src="game.js?v=8" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
 </body>
 </html>

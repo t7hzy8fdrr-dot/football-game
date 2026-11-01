@@ -54,6 +54,11 @@ canvas { display: block; }
 .logo.smaller { font-size: 42px; margin-bottom: 14px; }
 .ver { color: #ffd34d; font-weight: 700; }
 .tagline { margin: 8px 0 18px; color: #9fb0c8; font-size: 15px; letter-spacing: .5px; }
+.clubs { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; max-width: 470px; margin: 0 auto; }
+.clubs button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05);
+  color: #c7d2e4; padding: 5px 9px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.clubs button i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; box-shadow: 0 0 0 1px rgba(255,255,255,.3); }
+.clubs button.on { background: #ffd34d; color: #1a1406; border-color: #ffd34d; }
 .teams { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 18px; font-weight: 800; }
 .team { display: inline-flex; align-items: center; gap: 8px; }
 .team i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
@@ -112,6 +117,12 @@ button.ghost {
   .logo { font-size: 38px; }
   .tagline { margin: 4px 0 8px; }
   .teams { margin-bottom: 6px; }
+  .clubs { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 100%; padding-bottom: 2px; scrollbar-width: none; }
+  .clubs::-webkit-scrollbar { display: none; }
+  .clubs button { padding: 4px 8px; font-size: 11px; flex: none; }
+  .tagline { display: none; }
+  .label { margin-bottom: 3px; }
+  .choices button { padding: 5px 12px; }
   .opt { margin: 4px 0; }
   button.big { margin: 10px 0 4px; padding: 10px; }
 }

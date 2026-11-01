@@ -4,11 +4,11 @@
 
 // ───────────────────────── Константи ─────────────────────────
 const L = 105, W = 68;                         // поле, м
-const GOAL_W = 7.32, GOAL_H = 2.44, GOAL_D = 2.0, POST_R = 0.06;
+const GOAL_W = 8.0, GOAL_H = 2.68, GOAL_D = 2.0, POST_R = 0.06;
 const PT = W / 2 - GOAL_W / 2, PB = W / 2 + GOAL_W / 2;
 const G = 9.81, DT = 1 / 60;
 const BALL_R = 0.11;                           // фізичний радіус
-const BALL_VIS = window.matchMedia('(pointer: coarse)').matches ? 1.75 : 1.45;                         // м'яч трохи більший візуально, щоб його було видно
+const BALL_VIS = window.matchMedia('(pointer: coarse)').matches ? 1.6 : 1.4;                         // м'яч трохи більший візуально, щоб його було видно
 const AIR_K = 0.0125;                          // опір повітря (на метр)
 const MAGNUS = 0.0042;                         // ефект Магнуса (закрут)
 const ROLL_A = 0.42, ROLL_C = 0.75;            // тертя кочення по траві
@@ -29,10 +29,20 @@ const DIFF = {
   normal: { speed: 0.96, react: 0.3,  tackle: 0.38, acc: 0.72, gk: 0.7 },
   hard:   { speed: 1.03, react: 0.16, tackle: 0.52, acc: 0.86, gk: 0.84 },
 };
-const TEAMS = [
-  { name: 'ЛЕВИ',  short: 'ЛЕВ', shirt: 0xc8102e, trim: 0xffffff, shorts: 0xf2f2f2, socks: 0xc8102e, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', dir: 1, css: '#d7263d' },
-  { name: 'ВОВКИ', short: 'ВОВ', shirt: 0x1f56c8, trim: 0xf2c230, shorts: 0x0e1a33, socks: 0x1f56c8, gk: 0xf2c230, gkTrim: 0x7a5d00, num: '#f2c230', dir: -1, css: '#2a6be0' },
+// Вигадані клуби у класичних кольорах великих європейських команд (без справжніх назв і гербів)
+const CLUBS = [
+  { name: 'ЛЕВИ',     short: 'ЛЕВ', shirt: 0xc8102e, trim: 0xffffff, shorts: 0xf2f2f2, socks: 0xc8102e, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', css: '#d7263d' },
+  { name: 'ВОВКИ',    short: 'ВОВ', shirt: 0x1f56c8, trim: 0xf2c230, shorts: 0x0e1a33, socks: 0x1f56c8, gk: 0xf2c230, gkTrim: 0x7a5d00, num: '#f2c230', css: '#2a6be0' },
+  { name: 'КОРОЛІ',   short: 'КОР', shirt: 0xf4f4f4, trim: 0xd4af37, shorts: 0xf4f4f4, socks: 0xf4f4f4, gk: 0x2b2b2b, gkTrim: 0x8a8a8a, num: '#1b2a4a', css: '#f4f4f4' },
+  { name: 'ГРАНАТ',   short: 'ГРН', shirt: 0x1d3f8f, stripe: 0x9b1b3a, trim: 0xf2c230, shorts: 0x1d3f8f, socks: 0x1d3f8f, gk: 0xf28c28, gkTrim: 0x7a3d00, num: '#f2c230', css: '#7a2a5a' },
+  { name: 'НЕБЕСНІ',  short: 'НЕБ', shirt: 0x7ec3ee, trim: 0x123a63, shorts: 0xffffff, socks: 0x7ec3ee, gk: 0x2bbf6a, gkTrim: 0x0b4d28, num: '#123a63', css: '#7ec3ee' },
+  { name: 'БДЖОЛИ',   short: 'БДЖ', shirt: 0xf7d417, trim: 0x111111, shorts: 0x111111, socks: 0xf7d417, gk: 0x7d3cc4, gkTrim: 0x2d1150, num: '#111111', css: '#f7d417' },
+  { name: 'ЗЕБРИ',    short: 'ЗЕБ', shirt: 0xf4f4f4, stripe: 0x111111, trim: 0x111111, shorts: 0x111111, socks: 0x111111, gk: 0xf28c28, gkTrim: 0x7a3d00, num: '#d4af37', css: '#999999' },
+  { name: 'ДИЯВОЛИ',  short: 'ДИЯ', shirt: 0xc8102e, stripe: 0x111111, trim: 0x111111, shorts: 0xf4f4f4, socks: 0x111111, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', css: '#a01020' },
+  { name: 'ЗМІЇ',     short: 'ЗМІ', shirt: 0x1f56c8, stripe: 0x111111, trim: 0x111111, shorts: 0x111111, socks: 0x111111, gk: 0xc6e83a, gkTrim: 0x4a5a10, num: '#ffffff', css: '#1a3a90' },
+  { name: 'БАРОНИ',   short: 'БАР', shirt: 0xdc0f2d, trim: 0xffffff, shorts: 0xdc0f2d, socks: 0xdc0f2d, gk: 0x111111, gkTrim: 0x444444, num: '#ffffff', css: '#dc0f2d' },
 ];
+const TEAMS = [{ ...CLUBS[0], dir: 1 }, { ...CLUBS[1], dir: -1 }];
 const FORM = [
   { r: 'GK', x: 3, y: 34 },
   { r: 'DF', x: 20, y: 13 }, { r: 'DF', x: 16, y: 34 }, { r: 'DF', x: 20, y: 55 },
@@ -344,7 +354,7 @@ function buildStandFlags() {
     g.fillStyle = b; g.fillRect(0, 56, 256, 48);
     g.fillStyle = a === '#ffffff' ? '#111' : '#fff'; g.font = '900 34px Segoe UI, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 81);
   });
-  const texs = [mk('#c8102e', '#ffffff', 'ЛЕВИ'), mk('#1f56c8', '#ffffff', 'ВОВКИ'), mk('#c8102e', '#ffd34d', 'ВПЕРЕД'), mk('#1f56c8', '#ffd34d', 'ВОВКИ')];
+  const texs = [mk('#c8102e', '#ffffff', 'ВПЕРЕД'), mk('#1f56c8', '#ffffff', 'ФУТБОЛ'), mk('#c8102e', '#ffd34d', 'ГОЛ!'), mk('#1f56c8', '#ffd34d', 'ВПЕРЕД')];
   const geo = new T3.PlaneGeometry(3.4, 2.1, 14, 6);
   for (let i = 0; i < 14; i++) {
     const far = i < 9;
@@ -376,15 +386,20 @@ function buildScreens() {
   const rt = new T3.WebGLRenderTarget(isMobile ? 320 : 480, isMobile ? 180 : 270);
   screens.rt = rt; screens.cam = new T3.PerspectiveCamera(30, 16 / 9, 0.5, 400);
   const frameMat = new T3.MeshStandardMaterial({ color: 0x14171f, roughness: 0.5, metalness: 0.4 });
+  const bandTex = canvasTex(512, 42, () => {});
+  screens.drawBand = () => {
+    const c = bandTex.image.getContext('2d'), w = 512, h = 42;
+    c.fillStyle = '#0f1c3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd34d'; c.font = '900 30px Segoe UI, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(`${TEAMS[0].name}  —  ${TEAMS[1].name}`, w / 2, h / 2 + 1);
+    bandTex.needsUpdate = true;
+  };
+  screens.drawBand();
   const scrMat = new T3.MeshBasicMaterial({ map: rt.texture, toneMapped: false });
   for (const x of [17, L - 17]) {
     const g = new T3.Group();
     const fr = new T3.Mesh(new T3.BoxGeometry(17, 9.9, 0.6), frameMat); g.add(fr);
     const sc = new T3.Mesh(new T3.PlaneGeometry(16, 9), scrMat); sc.position.z = 0.31; g.add(sc);
-    const band = new T3.Mesh(new T3.PlaneGeometry(17, 1.4), new T3.MeshBasicMaterial({ map: canvasTex(512, 42, (c, w, h) => {
-      c.fillStyle = '#0f1c3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd34d'; c.font = '900 30px Segoe UI, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText('ЛЕВИ  —  ВОВКИ', w / 2, h / 2 + 1);
-    }) }));
+    const band = new T3.Mesh(new T3.PlaneGeometry(17, 1.4), new T3.MeshBasicMaterial({ map: bandTex }));
     band.position.set(0, -5.75, 0.31); g.add(band);
     g.position.copy(V(x, -6.5, 24.3)); g.rotation.x = 0.1;
     scene.add(g);
@@ -683,7 +698,7 @@ function animatePlayer(p, dt = 0) {
 // ───────────────────────── Реалістичні гравці ─────────────────────────
 // 3D-модель людини зі скелетом і анімаціями (Quaternius, ліцензія CC0), форма команд малюється шейдером
 let HUMAN = null;
-const LOCO = [['idle', 'Idle_Loop', 0], ['walk', 'Walk_Loop', 1.45], ['jog', 'Jog_Fwd_Loop', 3.6], ['sprint', 'Sprint_Loop', 6.6]];
+const LOCO = [['idle', 'Idle_Loop', 0], ['walk', 'Walk_Loop', 1.2], ['jog', 'Jog_Fwd_Loop', 2.8], ['sprint', 'Sprint_Loop', 5.0]];
 const EXTRA = [['jump', 'Jump_Loop'], ['fall', 'Death01'], ['dance', 'Dance_Loop'], ['crouch', 'Crouch_Idle_Loop']];
 function loadHumans() {
   if (!T3.GLTFLoader) return Promise.resolve(null);
@@ -693,7 +708,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=7'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=8'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -754,15 +769,17 @@ function kitMaterial(p, cols) {
     uSocks: col(cols ? cols.socks : p.gk ? 0x1d1d1d : T.socks), uBoots: col(p.boot),
     uNum: { value: kitNumTex(cols ? '' : p.num, p.gk ? '#ffffff' : T.num) },
     uTrim: col(cols ? cols.shirt : p.gk ? T.gkTrim : T.trim), uDetail: { value: cols ? 0 : 1 },
+    uStripe: col(!cols && !p.gk && T.stripe !== undefined ? T.stripe : 0), uStripeOn: { value: !cols && !p.gk && T.stripe !== undefined ? 1 : 0 },
   };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = 'attribute vec4 kit;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\nvKit = kit; vBind = position; vBindN = normal;\ntransformed += normal * (0.02 * kit.x + 0.028 * kit.y + 0.005 * kit.z + 0.009 * kit.w);');
-    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots, uTrim;\nuniform float uDetail;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots, uTrim, uStripe;\nuniform float uDetail, uStripeOn;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
       .replace('#include <map_fragment>', `#include <map_fragment>
         float km = clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0);
         vec3 kc = (uShirt * vKit.x + uShorts * vKit.y + uSocks * vKit.z + uBoots * vKit.w) / max(km, 0.001);
+        if (uStripeOn > 0.5 && vKit.x > 0.5 && abs(vBind.x) < 0.27 && fract(vBind.x * 7.0 + 0.25) < 0.5) kc = uStripe;
         float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         vec3 fab = kc * (0.93 + 0.12 * (lum - 0.45));
         if (uDetail > 0.5) {   // деталі форми: комір, манжети, смуги на шортах, номер спереду
@@ -784,7 +801,7 @@ function kitMaterial(p, cols) {
       .replace('#include <normal_fragment_maps>', T3.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', 'mapN.xy *= normalScale * (1.0 - 0.7 * clamp(vKit.x + vKit.y, 0.0, 1.0));'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, vKit.w > 0.5 ? 0.35 : 0.8, clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0));');
   };
-  m.customProgramCacheKey = () => 'kit-v2';
+  m.customProgramCacheKey = () => 'kit-v3';
   return m;
 }
 const hairMatCache = {};
@@ -806,7 +823,7 @@ function boneRot(bone, axis, ang, model) {
 function buildHumanModel(p) {
   const root = new T3.Group(), body = new T3.Group(); root.add(body);
   const g = T3.SkeletonUtils.clone(HUMAN.scene); body.add(g);
-  const sc = p.height; g.scale.setScalar(sc);
+  const sc = p.height; g.scale.set(sc * p.build, sc, sc * (0.5 + p.build * 0.5));
   let bodyMesh = null;
   g.traverse((o) => {
     if (!o.isSkinnedMesh) return;
@@ -863,7 +880,7 @@ function animateHuman(p, dt) {
     const target = special ? 0 : tw[key];
     m.w[key] = lerp(m.w[key] || 0, target, k);
     a.setEffectiveWeight(m.w[key]);
-    if (native) rate += tw[key] * clamp(sp / native, 0.55, 1.6) / a.getClip().duration;
+    if (native) rate += tw[key] * clamp(sp / native, 0.6, 1.75) / a.getClip().duration;
   }
   m.gph += rate * dt * (fl < -0.2 ? -1 : 1);
   const ph = ((m.gph % 1) + 1) % 1;
@@ -995,7 +1012,7 @@ const Sound = {
 
 // ───────────────────────── Стан гри ─────────────────────────
 const STATS = { shots: 0, passes: 0, tackles: 0, headers: 0 };   // лічильники для тестів
-const settings = { diff: 'normal', mins: 4 };
+const settings = { diff: 'normal', mins: 4, home: 0, away: 1 };
 let players = [], ball = null, state = 'kickoff', stateT = 0;
 let score = [0, 0], clock = 0, matchLen = 240, humanTeam = -1, ctrl = null, demo = true, paused = false;
 let possTeam = 0, kickoffTeam = 0, passTarget = null, setpiece = null, lastGoalTeam = 0;
@@ -1012,7 +1029,7 @@ function makePlayers() {
       jx: rand(-2, 2), jy: rand(-2, 2), jT: rand(2, 5), decT: 0, locked: false, pending: null, fallen: false, react: 0, read: 0,
       skin: SKINS[(Math.random() * SKINS.length) | 0], hair: HAIRS[(Math.random() * HAIRS.length) | 0],
       boot: [0x111111, 0xf2f2f2, 0xff5a1f, 0x2ad1ff, 0xffd34d][(Math.random() * 5) | 0], hairStyle: Math.random() < 0.12 ? 0 : Math.random() < 0.4 ? 2 : 1,
-      beard: Math.random() < 0.3, skinLight: Math.random() < 0.6, skinTint: [0xffffff, 0xf3e3d6, 0xffeee0, 0xe8d2c0][(Math.random() * 4) | 0], height: rand(0.96, 1.04),
+      beard: Math.random() < 0.3, skinLight: Math.random() < 0.6, skinTint: [0xffffff, 0xf3e3d6, 0xffeee0, 0xd9b8a0, 0xb08a70, 0x8a6650][(Math.random() * 6) | 0], height: rand(0.9, 0.98), build: rand(0.9, 1.1),
     };
     p.model = HUMAN ? buildHumanModel(p) : buildPlayerModel(p);
     players.push(p);
@@ -1048,7 +1065,17 @@ function setupKickoff(team) {
   for (const n of nets) n.disp.fill(0);
   if (humanTeam >= 0) ctrl = humanTeam === team ? players.find((p) => p.team === team && p.role === 'FW') : players.find((p) => p.team === humanTeam && p.i === 4);
 }
+function applyClubs() {
+  TEAMS[0] = { ...CLUBS[settings.home], dir: 1 }; TEAMS[1] = { ...CLUBS[settings.away], dir: -1 };
+  const bt = document.querySelectorAll('#board .b-team');
+  if (bt.length === 2) {
+    bt[0].innerHTML = `<i style="background:${TEAMS[0].css}"></i>${TEAMS[0].short}`;
+    bt[1].innerHTML = `${TEAMS[1].short}<i style="background:${TEAMS[1].css}"></i>`;
+  }
+  if (screens.drawBand) screens.drawBand();
+}
 function startMatch(isDemo) {
+  applyClubs();
   demo = isDemo; humanTeam = isDemo ? -1 : 0; ctrl = null;
   score = [0, 0]; clock = 0; matchLen = isDemo ? 1e9 : settings.mins * 60;
   makePlayers(); setupKickoff(Math.random() < 0.5 ? 0 : 1);
@@ -1238,7 +1265,7 @@ function humanControl(dt) {
     }
     if (inp.shootPress) humanTackle(p, inp);
     autoSwT -= dt;
-    if (autoSwT <= 0 && (!ball.owner || ball.owner.team !== humanTeam)) {
+    if (autoSwT <= 0 && !(passTarget && !ball.owner && passTarget.team === humanTeam) && (!ball.owner || ball.owner.team !== humanTeam)) {
       autoSwT = 0.4;
       const c = closestToBall(humanTeam);
       if (c && c !== p && passTarget !== p && ballDist(p) > ballDist(c) + 4.5) ctrl = c;
@@ -1263,8 +1290,7 @@ function humanPass(p, inp, loft) {
     if (s > bs) { bs = s; best = t; }
   }
   if (!best) { kickTo(p, p.x + ax * 15, p.y + ay * 15, loft ? loftSpeedFor(14, 6) : groundSpeedFor(20), loft ? 6 : 0); return; }
-  passTo(p, best, loft);
-  if (!best.gk) ctrl = best;
+  passTo(p, best, loft);   // керування перейде до партнера, коли він прийме м'яч
 }
 function humanShoot(p, power, inp) {
   if (p.locked) { humanPass(p, inp, true); return; }
@@ -1832,13 +1858,14 @@ function updateCamera(dt, now) {
     const wide = camMode === 1;   // 0 — ближня трансляція, 1 — широкий план
     look.x = clamp(look.x, -L / 2 + (wide ? 12 : 2), L / 2 - (wide ? 12 : 2));
     look.z = clamp(look.z, -W / 2 + 4, W / 2 - 4);
-    const back = isMobile ? 12 : 19, hgt = isMobile ? 6.6 : 9;   // на телефоні камера ближче — гравці більші
-    pos = wide ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, hgt, Math.min(W / 2 + 7, look.z + back));
+    // трансляція: видно третину поля навколо м'яча; широкий план — майже половину
+    const back = wide ? 33 : 23, hgt = wide ? 17 : 12.5;
+    pos = new T3.Vector3(look.x * 0.92, hgt, Math.min(W / 2 + (wide ? 16 : 9), look.z + back));
   }
   const k = Math.min(1, dt * (demo ? 1 : closeUp ? 7 : 3.2));
   camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : closeUp ? 5 : 2.5)));
   camera.position.copy(camP); camera.lookAt(camT);
-  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : isMobile ? 31 : 34;
+  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 33 : 31;
   camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix();
   sun.position.copy(camT).add(new T3.Vector3(-26, 60, -32)); sun.target.position.copy(camT); sun.target.updateMatrixWorld();
 }
@@ -1940,6 +1967,28 @@ function goFullscreen() {   // на телефоні гра відкриваєт
   } catch (e) { /* браузер не дозволив — граємо як є */ }
 }
 function exitFullscreen() { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* ок */ } }
+(() => {   // вибір команд у меню
+  const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+  const sw = (c) => c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hex(c.shirt)} 0 3px, ${hex(c.stripe)} 3px 6px)` : hex(c.shirt);
+  const draw = () => {
+    for (const [id, key] of [['clubHome', 'home'], ['clubAway', 'away']]) {
+      const el = $(id); el.innerHTML = '';
+      CLUBS.forEach((c, i) => {
+        const b = document.createElement('button');
+        b.innerHTML = `<i style="background:${sw(c)}"></i>${c.name}`;
+        if (settings[key] === i) b.classList.add('on');
+        b.onclick = () => {
+          const other = key === 'home' ? 'away' : 'home';
+          if (settings[other] === i) settings[other] = settings[key];   // не можна грати самим із собою — міняємо місцями
+          settings[key] = i; draw();
+          if (demo && window.__started) startMatch(true);
+        };
+        el.appendChild(b);
+      });
+    }
+  };
+  draw();
+})();
 function play() {
   Sound.init();
   if (isMobile && !document.fullscreenElement) goFullscreen();
