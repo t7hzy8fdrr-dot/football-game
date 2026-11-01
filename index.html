@@ -11,11 +11,12 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>ГОЛЕАДОР — футбол у браузері</title>
-<link rel="stylesheet" href="style.css?v=7" onerror="this.onerror=null;this.href='style.css'">
+<link rel="stylesheet" href="style.css?v=11" onerror="this.onerror=null;this.href='style.css'">
 </head>
 <body>
 <div id="view"></div>
 <div id="vignette"></div>
+<div id="names"></div>
 <div id="hud" class="hidden">
   <div id="board">
     <div class="b-logo">Г</div>
@@ -33,12 +34,23 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <div class="logo">ГОЛЕАДОР</div>
-    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 7</span></div>
-    <div class="teams">
-      <span class="team"><i style="background:#d7263d"></i>ЛЕВИ <small>(ви)</small></span>
-      <span class="vs">проти</span>
-      <span class="team"><i style="background:#1f5fd6"></i>ВОВКИ</span>
+    <div class="tagline">Футбол просто в браузері <span class="ver">· версія 11</span></div>
+    <div class="opt">
+      <div class="choices" data-opt="mode">
+        <button data-v="match" class="on">Матч</button>
+        <button data-v="cup">Турнір</button>
+        <button data-v="career">Кар'єра</button>
+      </div>
     </div>
+    <div class="opt">
+      <div class="label">Ваша команда</div>
+      <div class="clubs" id="clubHome"></div>
+    </div>
+    <div class="opt" id="optAway">
+      <div class="label">Суперник</div>
+      <div class="clubs" id="clubAway"></div>
+    </div>
+    <div class="row2">
     <div class="opt">
       <div class="label">Складність</div>
       <div class="choices" data-opt="diff">
@@ -55,12 +67,15 @@
         <button data-v="6">6 хв</button>
       </div>
     </div>
+    </div>
     <button id="play" class="big">ГРАТИ</button>
+    <button id="openEditor" class="ghost slim">✎ Редактор команд</button>
     <div class="help">
       <div><b>Стрілки</b> або <b>WASD</b> — бігти</div>
       <div><b>Shift</b> — прискорення</div>
       <div><b>Пробіл</b> / <b>J</b> — пас (без м'яча — змінити гравця)</div>
       <div><b>K</b> / <b>X</b> — удар (затисніть для сили; без м'яча — відбір)</div>
+      <div><b>V</b> — пас на хід · <b>B</b> — навіс</div>
       <div><b>C</b> — камера · <b>P</b> — пауза · <b>M</b> — звук</div>
     </div>
   </div>
@@ -78,8 +93,49 @@
   <div class="panel small">
     <div class="logo smaller" id="endTitle">ПЕРЕМОГА!</div>
     <div class="final" id="endScore">0 : 0</div>
+    <div class="end-note hidden" id="endNote"></div>
     <button id="again" class="big">ЩЕ МАТЧ</button>
     <button id="toMenu2" class="ghost">Меню</button>
+  </div>
+</div>
+
+<div id="editor" class="overlay hidden">
+  <div class="panel wide ed">
+    <div class="logo smaller">РЕДАКТОР</div>
+    <div class="clubs" id="edClubs"></div>
+    <div class="ed-body">
+      <div class="ed-col">
+        <div class="ed-row"><label>Назва<input id="edName" maxlength="14" autocomplete="off"></label><label class="sm">Скор.<input id="edShort" maxlength="3" autocomplete="off"></label></div>
+        <div class="br-h">ФОРМА</div>
+        <div class="ed-colors">
+          <label><input type="color" id="edShirt">Футболка</label>
+          <label><input type="color" id="edTrim">Оздоблення</label>
+          <label><input type="color" id="edStripe"><span><input type="checkbox" id="edStripeOn">Смуги</span></label>
+          <label><input type="color" id="edShorts">Шорти</label>
+          <label><input type="color" id="edSocks">Гетри</label>
+          <label><input type="color" id="edGk">Воротар</label>
+        </div>
+        <div class="br-h">ЕМБЛЕМА</div>
+        <div class="ed-crest">
+          <div id="edCrestPrev"></div>
+          <label class="ed-file">Вибрати фото<input type="file" accept="image/*" id="edCrestFile" hidden></label>
+          <button id="edCrestDel" class="ed-file">Прибрати</button>
+        </div>
+      </div>
+      <div class="ed-col" id="edPlayers"></div>
+    </div>
+    <button id="edSave" class="big">ЗБЕРЕГТИ</button>
+    <div class="hub-btns"><button id="edBack" class="ghost">Назад у меню</button><button id="edReset" class="ghost">Повернути як було</button></div>
+  </div>
+</div>
+
+<div id="hub" class="overlay hidden">
+  <div class="panel wide">
+    <div class="logo smaller" id="hubTitle">КУБОК</div>
+    <div class="hub-sub" id="hubSub"></div>
+    <div id="hubBody"></div>
+    <button id="hubPlay" class="big">ГРАТИ МАТЧ</button>
+    <div class="hub-btns"><button id="hubMenu" class="ghost">Меню</button><button id="hubReset" class="ghost">Почати заново</button></div>
   </div>
 </div>
 
@@ -88,8 +144,14 @@
   <div id="stick"><div id="knob"></div></div>
   <div id="btns">
     <button id="tSprint">⚡</button>
-    <button id="tPass">ПАС</button>
-    <button id="tShoot">УДАР</button>
+    <div class="bcol">
+      <button id="tThrough">НА ХІД</button>
+      <button id="tPass">ПАС</button>
+    </div>
+    <div class="bcol">
+      <button id="tCross">НАВІС</button>
+      <button id="tShoot">УДАР</button>
+    </div>
   </div>
   <button id="tPause">❚❚</button>
   <button id="tFull" title="На весь екран">⛶</button>
@@ -109,7 +171,7 @@
     setTimeout(function () { if (!window.__started) show('Завантаження триває задовго. Оновіть сторінку.'); }, 25000);
   })();
 </script>
-<script src="lib/three.bundle.js?v=7" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
-<script src="game.js?v=7" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
+<script src="lib/three.bundle.js?v=11" onerror="document.write('<script src=\"lib/three.bundle.js\"><\/script>')"></script>
+<script src="game.js?v=11" onerror="var s=document.createElement('script');s.src='game.js';document.body.appendChild(s);"></script>
 </body>
 </html>

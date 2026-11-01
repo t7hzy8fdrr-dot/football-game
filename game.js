@@ -4,11 +4,11 @@
 
 // ───────────────────────── Константи ─────────────────────────
 const L = 105, W = 68;                         // поле, м
-const GOAL_W = 7.32, GOAL_H = 2.44, GOAL_D = 2.0, POST_R = 0.06;
+const GOAL_W = 8.0, GOAL_H = 2.68, GOAL_D = 2.0, POST_R = 0.06;
 const PT = W / 2 - GOAL_W / 2, PB = W / 2 + GOAL_W / 2;
 const G = 9.81, DT = 1 / 60;
 const BALL_R = 0.11;                           // фізичний радіус
-const BALL_VIS = window.matchMedia('(pointer: coarse)').matches ? 1.75 : 1.45;                         // м'яч трохи більший візуально, щоб його було видно
+const BALL_VIS = window.matchMedia('(pointer: coarse)').matches ? 1.6 : 1.4;                         // м'яч трохи більший візуально, щоб його було видно
 const AIR_K = 0.0125;                          // опір повітря (на метр)
 const MAGNUS = 0.0042;                         // ефект Магнуса (закрут)
 const ROLL_A = 0.42, ROLL_C = 0.75;            // тертя кочення по траві
@@ -29,10 +29,51 @@ const DIFF = {
   normal: { speed: 0.96, react: 0.3,  tackle: 0.38, acc: 0.72, gk: 0.7 },
   hard:   { speed: 1.03, react: 0.16, tackle: 0.52, acc: 0.86, gk: 0.84 },
 };
-const TEAMS = [
-  { name: 'ЛЕВИ',  short: 'ЛЕВ', shirt: 0xc8102e, trim: 0xffffff, shorts: 0xf2f2f2, socks: 0xc8102e, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', dir: 1, css: '#d7263d' },
-  { name: 'ВОВКИ', short: 'ВОВ', shirt: 0x1f56c8, trim: 0xf2c230, shorts: 0x0e1a33, socks: 0x1f56c8, gk: 0xf2c230, gkTrim: 0x7a5d00, num: '#f2c230', dir: -1, css: '#2a6be0' },
+// Вигадані клуби у класичних кольорах великих європейських команд (без справжніх назв і гербів)
+const CLUBS = [
+  { name: 'ЛЕВИ',     short: 'ЛЕВ', shirt: 0xc8102e, trim: 0xffffff, shorts: 0xf2f2f2, socks: 0xc8102e, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', css: '#d7263d' },
+  { name: 'ВОВКИ',    short: 'ВОВ', shirt: 0x1f56c8, trim: 0xf2c230, shorts: 0x0e1a33, socks: 0x1f56c8, gk: 0xf2c230, gkTrim: 0x7a5d00, num: '#f2c230', css: '#2a6be0' },
+  { name: 'КОРОЛІ',   short: 'КОР', shirt: 0xf4f4f4, trim: 0xd4af37, shorts: 0xf4f4f4, socks: 0xf4f4f4, gk: 0x2b2b2b, gkTrim: 0x8a8a8a, num: '#1b2a4a', css: '#f4f4f4' },
+  { name: 'ГРАНАТ',   short: 'ГРН', shirt: 0x1d3f8f, stripe: 0x9b1b3a, trim: 0xf2c230, shorts: 0x1d3f8f, socks: 0x1d3f8f, gk: 0xf28c28, gkTrim: 0x7a3d00, num: '#f2c230', css: '#7a2a5a' },
+  { name: 'НЕБЕСНІ',  short: 'НЕБ', shirt: 0x7ec3ee, trim: 0x123a63, shorts: 0xffffff, socks: 0x7ec3ee, gk: 0x2bbf6a, gkTrim: 0x0b4d28, num: '#123a63', css: '#7ec3ee' },
+  { name: 'БДЖОЛИ',   short: 'БДЖ', shirt: 0xf7d417, trim: 0x111111, shorts: 0x111111, socks: 0xf7d417, gk: 0x7d3cc4, gkTrim: 0x2d1150, num: '#111111', css: '#f7d417' },
+  { name: 'ЗЕБРИ',    short: 'ЗЕБ', shirt: 0xf4f4f4, stripe: 0x111111, trim: 0x111111, shorts: 0x111111, socks: 0x111111, gk: 0xf28c28, gkTrim: 0x7a3d00, num: '#d4af37', css: '#999999' },
+  { name: 'ДИЯВОЛИ',  short: 'ДИЯ', shirt: 0xc8102e, stripe: 0x111111, trim: 0x111111, shorts: 0xf4f4f4, socks: 0x111111, gk: 0x1fae5b, gkTrim: 0x0b4d28, num: '#ffffff', css: '#a01020' },
+  { name: 'ЗМІЇ',     short: 'ЗМІ', shirt: 0x1f56c8, stripe: 0x111111, trim: 0x111111, shorts: 0x111111, socks: 0x111111, gk: 0xc6e83a, gkTrim: 0x4a5a10, num: '#ffffff', css: '#1a3a90' },
+  { name: 'БАРОНИ',   short: 'БАР', shirt: 0xdc0f2d, trim: 0xffffff, shorts: 0xdc0f2d, socks: 0xdc0f2d, gk: 0x111111, gkTrim: 0x444444, num: '#ffffff', css: '#dc0f2d' },
 ];
+// сила клубу (для турніру й кар'єри): впливає на результати матчів, які грають без вас
+[79, 76, 86, 84, 84, 78, 82, 82, 80, 85].forEach((r, i) => (CLUBS[i].rt = r));
+// ── Редактор: зміни гравця (назви, кольори, емблема, склад) зберігаються на пристрої ──
+const CLUB_DEFAULTS = CLUBS.map((c) => ({ ...c }));
+const EDIT_KEY = 'goleador-edits-v1';
+let EDITS = {};
+try { EDITS = JSON.parse(localStorage.getItem(EDIT_KEY)) || {}; } catch (e) { EDITS = {}; }
+const hexStr = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0');
+const lumOf = (c) => (0.3 * ((c >> 16) & 255) + 0.59 * ((c >> 8) & 255) + 0.11 * (c & 255)) / 255;
+const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+function applyEdits() {
+  CLUBS.forEach((c, i) => {
+    const d = CLUB_DEFAULTS[i], e = EDITS[i] || {};
+    for (const k of Object.keys(c)) delete c[k];
+    Object.assign(c, d);
+    if (e.name) c.name = e.name;
+    if (e.short) c.short = e.short;
+    for (const k of ['shirt', 'trim', 'shorts', 'socks', 'gk']) if (typeof e[k] === 'number') c[k] = e[k];
+    if ('stripe' in e) { if (e.stripe === null) delete c.stripe; else c.stripe = e.stripe; }
+    if (typeof e.shirt === 'number' && e.shirt !== d.shirt) { c.css = hexStr(e.shirt); c.num = lumOf(e.shirt) > 0.6 ? '#111111' : '#ffffff'; }
+    c.crest = e.crest || null; c.players = e.players || null; c.nums = e.nums || null;
+  });
+}
+applyEdits();
+// значок клубу: емблема гравця або кольоровий квадратик форми
+function clubBadge(i) {
+  const c = CLUBS[i];
+  if (c.crest) return `<img class="crest" src="${c.crest}" alt="">`;
+  const bg = c.stripe !== undefined ? `repeating-linear-gradient(90deg, ${hexStr(c.shirt)} 0 3px, ${hexStr(c.stripe)} 3px 6px)` : hexStr(c.shirt);
+  return `<i style="background:${bg}"></i>`;
+}
+const TEAMS = [{ ...CLUBS[0], idx: 0, dir: 1 }, { ...CLUBS[1], idx: 1, dir: -1 }];
 const FORM = [
   { r: 'GK', x: 3, y: 34 },
   { r: 'DF', x: 20, y: 13 }, { r: 'DF', x: 16, y: 34 }, { r: 'DF', x: 20, y: 55 },
@@ -40,6 +81,10 @@ const FORM = [
   { r: 'FW', x: 49, y: 34 },
 ];
 const NUMS = [1, 2, 4, 3, 8, 10, 9];
+// вигадані прізвища для підписів над гравцями
+const SURNAMES = ['КОВАЛЬ', 'МОРЕНО', 'ГАРСІЯ', 'ШЕВЧУК', 'ЛОРЕНЦ', 'БЕРТІ', 'ДЮПОН', 'СІЛВА', 'НОВАК', 'РОССІ', 'КРУЗ', 'ГОНЧАР', 'ФЕРРО', 'ВАЛЕНТІ', 'КЛЕЙН',
+  'ОЛІВЕЙРА', 'ТКАЧ', 'МАРТЕН', 'БРАУН', 'ДІАС', 'ЯНСЕН', 'ЛУКАЧ', 'САНТОС', 'ВОЛКЕР', 'КАРУЗО', 'МЕЛЬНИК', 'ПЕРЕС', 'ГРІН', 'ЛЕБЕДЬ', 'ФОНТЕН',
+  'КОСТА', 'ВЕБЕР', 'ЛІНДЕ', 'БОНДАР', 'РІВЕРА', 'ОРТІС', 'ШМІДТ', 'МАЛДІ', 'ПОЛІЩУК', 'ЕНЦО', 'ДАЛЬ', 'РЕЙЕС', 'ГОРДОН', 'САВЧЕНКО', 'НАВАРРО'];
 const SKINS = [0xf1c7a5, 0xe0ac85, 0xc68863, 0x8d5a3b, 0xf5d3b8, 0x6b4128];
 const HAIRS = [0x1b1209, 0x3b2412, 0x6b4320, 0xc9a15a, 0x0d0d0d, 0x7a3d18];
 
@@ -344,7 +389,7 @@ function buildStandFlags() {
     g.fillStyle = b; g.fillRect(0, 56, 256, 48);
     g.fillStyle = a === '#ffffff' ? '#111' : '#fff'; g.font = '900 34px Segoe UI, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 81);
   });
-  const texs = [mk('#c8102e', '#ffffff', 'ЛЕВИ'), mk('#1f56c8', '#ffffff', 'ВОВКИ'), mk('#c8102e', '#ffd34d', 'ВПЕРЕД'), mk('#1f56c8', '#ffd34d', 'ВОВКИ')];
+  const texs = [mk('#c8102e', '#ffffff', 'ВПЕРЕД'), mk('#1f56c8', '#ffffff', 'ФУТБОЛ'), mk('#c8102e', '#ffd34d', 'ГОЛ!'), mk('#1f56c8', '#ffd34d', 'ВПЕРЕД')];
   const geo = new T3.PlaneGeometry(3.4, 2.1, 14, 6);
   for (let i = 0; i < 14; i++) {
     const far = i < 9;
@@ -376,15 +421,20 @@ function buildScreens() {
   const rt = new T3.WebGLRenderTarget(isMobile ? 320 : 480, isMobile ? 180 : 270);
   screens.rt = rt; screens.cam = new T3.PerspectiveCamera(30, 16 / 9, 0.5, 400);
   const frameMat = new T3.MeshStandardMaterial({ color: 0x14171f, roughness: 0.5, metalness: 0.4 });
+  const bandTex = canvasTex(512, 42, () => {});
+  screens.drawBand = () => {
+    const c = bandTex.image.getContext('2d'), w = 512, h = 42;
+    c.fillStyle = '#0f1c3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd34d'; c.font = '900 30px Segoe UI, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(`${TEAMS[0].name}  —  ${TEAMS[1].name}`, w / 2, h / 2 + 1);
+    bandTex.needsUpdate = true;
+  };
+  screens.drawBand();
   const scrMat = new T3.MeshBasicMaterial({ map: rt.texture, toneMapped: false });
   for (const x of [17, L - 17]) {
     const g = new T3.Group();
     const fr = new T3.Mesh(new T3.BoxGeometry(17, 9.9, 0.6), frameMat); g.add(fr);
     const sc = new T3.Mesh(new T3.PlaneGeometry(16, 9), scrMat); sc.position.z = 0.31; g.add(sc);
-    const band = new T3.Mesh(new T3.PlaneGeometry(17, 1.4), new T3.MeshBasicMaterial({ map: canvasTex(512, 42, (c, w, h) => {
-      c.fillStyle = '#0f1c3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd34d'; c.font = '900 30px Segoe UI, Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText('ЛЕВИ  —  ВОВКИ', w / 2, h / 2 + 1);
-    }) }));
+    const band = new T3.Mesh(new T3.PlaneGeometry(17, 1.4), new T3.MeshBasicMaterial({ map: bandTex }));
     band.position.set(0, -5.75, 0.31); g.add(band);
     g.position.copy(V(x, -6.5, 24.3)); g.rotation.x = 0.1;
     scene.add(g);
@@ -683,7 +733,7 @@ function animatePlayer(p, dt = 0) {
 // ───────────────────────── Реалістичні гравці ─────────────────────────
 // 3D-модель людини зі скелетом і анімаціями (Quaternius, ліцензія CC0), форма команд малюється шейдером
 let HUMAN = null;
-const LOCO = [['idle', 'Idle_Loop', 0], ['walk', 'Walk_Loop', 1.45], ['jog', 'Jog_Fwd_Loop', 3.6], ['sprint', 'Sprint_Loop', 6.6]];
+const LOCO = [['idle', 'Idle_Loop', 0], ['walk', 'Walk_Loop', 1.2], ['jog', 'Jog_Fwd_Loop', 2.8], ['sprint', 'Sprint_Loop', 5.0]];
 const EXTRA = [['jump', 'Jump_Loop'], ['fall', 'Death01'], ['dance', 'Dance_Loop'], ['crouch', 'Crouch_Idle_Loop']];
 function loadHumans() {
   if (!T3.GLTFLoader) return Promise.resolve(null);
@@ -693,7 +743,7 @@ function loadHumans() {
   const parse = (b64) => new Promise((res, rej) => gl.parse(buf(b64), '', res, rej));
   const script = new Promise((res, rej) => {
     if (window.GOLEADOR_ASSETS) { res(); return; }
-    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=7'; sc.onload = res;
+    const sc = document.createElement('script'); sc.src = 'assets/models.js?v=11'; sc.onload = res;
     sc.onerror = () => { const s2 = document.createElement('script'); s2.src = 'assets/models.js'; s2.onload = res; s2.onerror = rej; document.head.appendChild(s2); };
     document.head.appendChild(sc);
   });
@@ -754,15 +804,17 @@ function kitMaterial(p, cols) {
     uSocks: col(cols ? cols.socks : p.gk ? 0x1d1d1d : T.socks), uBoots: col(p.boot),
     uNum: { value: kitNumTex(cols ? '' : p.num, p.gk ? '#ffffff' : T.num) },
     uTrim: col(cols ? cols.shirt : p.gk ? T.gkTrim : T.trim), uDetail: { value: cols ? 0 : 1 },
+    uStripe: col(!cols && !p.gk && T.stripe !== undefined ? T.stripe : 0), uStripeOn: { value: !cols && !p.gk && T.stripe !== undefined ? 1 : 0 },
   };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = 'attribute vec4 kit;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\nvKit = kit; vBind = position; vBindN = normal;\ntransformed += normal * (0.02 * kit.x + 0.028 * kit.y + 0.005 * kit.z + 0.009 * kit.w);');
-    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots, uTrim;\nuniform float uDetail;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
+    sh.fragmentShader = 'uniform vec3 uShirt, uShorts, uSocks, uBoots, uTrim, uStripe;\nuniform float uDetail, uStripeOn;\nuniform sampler2D uNum;\nvarying vec4 vKit;\nvarying vec3 vBind;\nvarying vec3 vBindN;\n' + sh.fragmentShader
       .replace('#include <map_fragment>', `#include <map_fragment>
         float km = clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0);
         vec3 kc = (uShirt * vKit.x + uShorts * vKit.y + uSocks * vKit.z + uBoots * vKit.w) / max(km, 0.001);
+        if (uStripeOn > 0.5 && vKit.x > 0.5 && abs(vBind.x) < 0.27 && fract(vBind.x * 7.0 + 0.25) < 0.5) kc = uStripe;
         float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         vec3 fab = kc * (0.93 + 0.12 * (lum - 0.45));
         if (uDetail > 0.5) {   // деталі форми: комір, манжети, смуги на шортах, номер спереду
@@ -784,7 +836,7 @@ function kitMaterial(p, cols) {
       .replace('#include <normal_fragment_maps>', T3.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', 'mapN.xy *= normalScale * (1.0 - 0.7 * clamp(vKit.x + vKit.y, 0.0, 1.0));'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, vKit.w > 0.5 ? 0.35 : 0.8, clamp(vKit.x + vKit.y + vKit.z + vKit.w, 0.0, 1.0));');
   };
-  m.customProgramCacheKey = () => 'kit-v2';
+  m.customProgramCacheKey = () => 'kit-v3';
   return m;
 }
 const hairMatCache = {};
@@ -806,7 +858,7 @@ function boneRot(bone, axis, ang, model) {
 function buildHumanModel(p) {
   const root = new T3.Group(), body = new T3.Group(); root.add(body);
   const g = T3.SkeletonUtils.clone(HUMAN.scene); body.add(g);
-  const sc = p.height; g.scale.setScalar(sc);
+  const sc = p.height; g.scale.set(sc * p.build, sc, sc * (0.5 + p.build * 0.5));
   let bodyMesh = null;
   g.traverse((o) => {
     if (!o.isSkinnedMesh) return;
@@ -863,7 +915,7 @@ function animateHuman(p, dt) {
     const target = special ? 0 : tw[key];
     m.w[key] = lerp(m.w[key] || 0, target, k);
     a.setEffectiveWeight(m.w[key]);
-    if (native) rate += tw[key] * clamp(sp / native, 0.55, 1.6) / a.getClip().duration;
+    if (native) rate += tw[key] * clamp(sp / native, 0.6, 1.75) / a.getClip().duration;
   }
   m.gph += rate * dt * (fl < -0.2 ? -1 : 1);
   const ph = ((m.gph % 1) + 1) % 1;
@@ -995,8 +1047,9 @@ const Sound = {
 
 // ───────────────────────── Стан гри ─────────────────────────
 const STATS = { shots: 0, passes: 0, tackles: 0, headers: 0 };   // лічильники для тестів
-const settings = { diff: 'normal', mins: 4 };
+const settings = { diff: 'normal', mins: 4, home: 0, away: 1, mode: 'match' };
 let players = [], ball = null, state = 'kickoff', stateT = 0;
+let matchScorers = [];
 let score = [0, 0], clock = 0, matchLen = 240, humanTeam = -1, ctrl = null, demo = true, paused = false;
 let possTeam = 0, kickoffTeam = 0, passTarget = null, setpiece = null, lastGoalTeam = 0;
 let charge = 0, charging = false, autoSwT = 0, camMode = 0, lastInput = { dx: 0, dy: 0 };
@@ -1006,17 +1059,66 @@ function makePlayers() {
   players = [];
   for (let t = 0; t < 2; t++) FORM.forEach((f, i) => {
     const p = {
-      team: t, i, role: f.r, gk: f.r === 'GK', num: NUMS[i],
+      team: t, i, role: f.r, gk: f.r === 'GK', num: (CLUBS[TEAMS[t].idx ?? t].nums || NUMS)[i] || NUMS[i],
       x: 0, y: 0, vx: 0, vy: 0, tvx: 0, tvy: 0, face: 0, phase: rand(0, 6), sprint: false, amp: 0, leanF: 0, leanS: 0, headY: 0, pace: rand(0.93, 1.06),
       kickCd: 0, stun: 0, slide: 0, dive: 0, diveDy: 0, tackleCd: 0, saveCd: 0, kickAnim: 0, touchAnim: 0, touchCd: 0, jump: 0, holdT: 0,
       jx: rand(-2, 2), jy: rand(-2, 2), jT: rand(2, 5), decT: 0, locked: false, pending: null, fallen: false, react: 0, read: 0,
       skin: SKINS[(Math.random() * SKINS.length) | 0], hair: HAIRS[(Math.random() * HAIRS.length) | 0],
       boot: [0x111111, 0xf2f2f2, 0xff5a1f, 0x2ad1ff, 0xffd34d][(Math.random() * 5) | 0], hairStyle: Math.random() < 0.12 ? 0 : Math.random() < 0.4 ? 2 : 1,
-      beard: Math.random() < 0.3, skinLight: Math.random() < 0.6, skinTint: [0xffffff, 0xf3e3d6, 0xffeee0, 0xe8d2c0][(Math.random() * 4) | 0], height: rand(0.96, 1.04),
+      beard: Math.random() < 0.3, skinLight: Math.random() < 0.6, skinTint: [0xffffff, 0xf3e3d6, 0xffeee0, 0xd9b8a0, 0xb08a70, 0x8a6650][(Math.random() * 6) | 0], height: rand(0.9, 0.98), build: rand(0.9, 1.1),
     };
     p.model = HUMAN ? buildHumanModel(p) : buildPlayerModel(p);
     players.push(p);
   });
+  // імена: у кожного клубу постійний склад, без повторів у матчі
+  const used = new Set();
+  for (let t = 0; t < 2; t++) {
+    const ci = TEAMS[t].idx ?? t, own = CLUBS[ci].players, pool = clubNames(ci); let k = 0;
+    for (const p of players) if (p.team === t && own && own[p.i]) { p.name = own[p.i]; used.add(p.name); }
+    for (const p of players) if (p.team === t && !(own && own[p.i])) { while (used.has(pool[k])) k++; p.name = pool[k++]; used.add(p.name); }
+  }
+  nameLayer.innerHTML = '';
+  for (const p of players) {
+    const el = document.createElement('div');
+    el.className = 'pname'; el.textContent = p.name;
+    nameLayer.appendChild(el); p.tag = el; p.tagOn = false;
+  }
+}
+const nameLayer = document.getElementById('names');
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function clubNames(ci) {
+  const r = seeded(ci * 7919 + 13), a = SURNAMES.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function updateNames() {
+  const show = !demo && state !== 'goal' && humanTeam >= 0;
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  const vis = [];
+  for (const p of players) {
+    let on = show && (p === ctrl || p === passTarget || p === ball.owner || ballDist(p) < 14);
+    if (on) {
+      tmpV.copy(V(p.x, p.y, 2.12 * (p.height || 0.94))).project(camera);
+      on = tmpV.z < 1 && Math.abs(tmpV.x) < 0.95 && Math.abs(tmpV.y) < 0.92;
+      if (on) vis.push({ p, x: (tmpV.x + 1) / 2 * w, y: (1 - tmpV.y) / 2 * h, me: p === ctrl });
+    }
+    if (on !== p.tagOn) { p.tag.style.display = on ? 'block' : 'none'; p.tagOn = on; }
+  }
+  // підписи не налазять один на одного: свій гравець — на місці, інші піднімаються вище
+  vis.sort((a, b) => (b.me - a.me) || (b.y - a.y));
+  const lh = w < 900 ? 13 : 15;
+  for (let i = 0; i < vis.length; i++) {
+    const a = vis[i], aw = a.p.name.length * (lh * 0.55) + 8;
+    for (let j = 0; j < i; j++) {
+      const b = vis[j], bw = b.p.name.length * (lh * 0.55) + 8;
+      if (Math.abs(a.x - b.x) < (aw + bw) / 2 && Math.abs(a.y - b.y) < lh) a.y = b.y - lh;
+    }
+    a.p.tag.style.transform = `translate(${a.x | 0}px,${a.y | 0}px) translate(-50%,-100%)`;
+    a.p.tag.classList.toggle('me', a.me);
+  }
 }
 function newBall(x, y) {
   ball = { x, y, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, top: 0, px: x, py: y, pz: 0, owner: null, held: false, protected: false, protT: 0, protX: x, protY: y, last: null, lastTeam: 0, grace: 0, inGoal: -1, q: new T3.Quaternion() };
@@ -1048,9 +1150,20 @@ function setupKickoff(team) {
   for (const n of nets) n.disp.fill(0);
   if (humanTeam >= 0) ctrl = humanTeam === team ? players.find((p) => p.team === team && p.role === 'FW') : players.find((p) => p.team === humanTeam && p.i === 4);
 }
+function applyClubs() {
+  TEAMS[0] = { ...CLUBS[settings.home], idx: settings.home, dir: 1 }; TEAMS[1] = { ...CLUBS[settings.away], idx: settings.away, dir: -1 };
+  const bt = document.querySelectorAll('#board .b-team');
+  if (bt.length === 2) {
+    const mark = (t) => (TEAMS[t].crest ? `<img class="crest" src="${TEAMS[t].crest}" alt="">` : `<i style="background:${TEAMS[t].css}"></i>`);
+    bt[0].innerHTML = `${mark(0)}${esc(TEAMS[0].short)}`;
+    bt[1].innerHTML = `${esc(TEAMS[1].short)}${mark(1)}`;
+  }
+  if (screens.drawBand) screens.drawBand();
+}
 function startMatch(isDemo) {
+  applyClubs();
   demo = isDemo; humanTeam = isDemo ? -1 : 0; ctrl = null;
-  score = [0, 0]; clock = 0; matchLen = isDemo ? 1e9 : settings.mins * 60;
+  score = [0, 0]; matchScorers = []; clock = 0; matchLen = isDemo ? 1e9 : settings.mins * 60;
   makePlayers(); setupKickoff(Math.random() < 0.5 ? 0 : 1);
   if (!isDemo) { showBanner('ПОЧАТОК МАТЧУ', `${TEAMS[0].name} — ${TEAMS[1].name}`, 1.8); Sound.crowdTo(0.07); }
 }
@@ -1203,10 +1316,12 @@ function readInput() {
     shootPress: !!(pressed.KeyK || pressed.KeyX || touch.shootPress),
     shootDown: !!(keys.KeyK || keys.KeyX || touch.shoot),
     shootRelease: !!(released.KeyK || released.KeyX || touch.shootRelease),
+    throughPress: !!(pressed.KeyV || pressed.KeyI || touch.throughPress),
+    crossPress: !!(pressed.KeyB || pressed.KeyU || touch.crossPress),
   };
   for (const k in pressed) delete pressed[k];
   for (const k in released) delete released[k];
-  touch.passPress = touch.shootPress = touch.shootRelease = false;
+  touch.passPress = touch.shootPress = touch.shootRelease = touch.throughPress = touch.crossPress = false;
   return inp;
 }
 function closestToBall(team, exclude) {
@@ -1227,6 +1342,8 @@ function humanControl(dt) {
   if (state !== 'play') { charge = 0; charging = false; return; }
   if (ball.owner === p) {
     if (inp.passPress) { tryKick(p, () => humanPass(p, inp, false)); return; }
+    if (inp.throughPress) { const i2 = { ...inp }; tryKick(p, () => humanThrough(p, i2)); return; }
+    if (inp.crossPress) { const i2 = { ...inp }; tryKick(p, () => humanPass(p, i2, true)); return; }
     if (inp.shootPress) { charging = true; charge = 0.12; }
     if (charging && inp.shootDown) charge = Math.min(1, charge + dt / 0.85);
     if (charging && (inp.shootRelease || charge >= 1)) { const c = charge, i2 = { ...inp }; tryKick(p, () => humanShoot(p, c, i2)); charging = false; charge = 0; }
@@ -1235,10 +1352,10 @@ function humanControl(dt) {
     if (inp.passPress) {
       if (!ball.owner && ballDist(p) < 1.6) { const i2 = { ...inp }; tryKick(p, () => humanPass(p, i2, false)); }   // пас в одне торкання
       else { const c = closestToBall(humanTeam, p); if (c) ctrl = c; }
-    }
+    } else if (inp.throughPress || inp.crossPress) { const c = closestToBall(humanTeam, p); if (c) ctrl = c; }
     if (inp.shootPress) humanTackle(p, inp);
     autoSwT -= dt;
-    if (autoSwT <= 0 && (!ball.owner || ball.owner.team !== humanTeam)) {
+    if (autoSwT <= 0 && !(passTarget && !ball.owner && passTarget.team === humanTeam) && (!ball.owner || ball.owner.team !== humanTeam)) {
       autoSwT = 0.4;
       const c = closestToBall(humanTeam);
       if (c && c !== p && passTarget !== p && ballDist(p) > ballDist(c) + 4.5) ctrl = c;
@@ -1263,8 +1380,31 @@ function humanPass(p, inp, loft) {
     if (s > bs) { bs = s; best = t; }
   }
   if (!best) { kickTo(p, p.x + ax * 15, p.y + ay * 15, loft ? loftSpeedFor(14, 6) : groundSpeedFor(20), loft ? 6 : 0); return; }
-  passTo(p, best, loft);
-  if (!best.gk) ctrl = best;
+  passTo(p, best, loft);   // керування перейде до партнера, коли він прийме м'яч
+}
+// пас на хід: м'яч іде у вільну зону перед партнером, ближче до чужих воріт
+function humanThrough(p, inp) {
+  const dir = TEAMS[p.team].dir;
+  let ax = inp.dx, ay = inp.dy;
+  if (!ax && !ay) { ax = dir; ay = 0; }
+  const m = hyp(ax, ay); ax /= m; ay /= m;
+  let best = null, bs = -1e9;
+  for (const t of players) {
+    if (t.team !== p.team || t === p || t.gk) continue;
+    const dx = t.x - p.x, dy = t.y - p.y, d = hyp(dx, dy);
+    if (d < 4 || d > 48) continue;
+    const c = (dx * ax + dy * ay) / d;
+    if (c < -0.1) continue;
+    const s = c * 3 + dx * dir * 0.06 - d * 0.02;
+    if (s > bs) { bs = s; best = t; }
+  }
+  if (!best) { kickTo(p, p.x + ax * 18, p.y + ay * 18, groundSpeedFor(24), 0); return; }
+  STATS.passes++;
+  const lead = clamp(hyp(best.x - p.x, best.y - p.y) * 0.3, 5, 11);
+  const tx = clamp(best.x + dir * lead, 3, L - 3), ty = clamp(best.y + (W / 2 - best.y) * 0.15, 3, W - 3);
+  const d1 = hyp(tx - ball.x, ty - ball.y);
+  kickTo(p, tx, ty, clamp(groundSpeedFor(d1 * 1.1 + 2), 10, 28), 0);
+  passTarget = best; best.recvT = 0;
 }
 function humanShoot(p, power, inp) {
   if (p.locked) { humanPass(p, inp, true); return; }
@@ -1761,7 +1901,9 @@ function goalScored(team) {
   score[team]++; lastGoalTeam = team;
   ball.inGoal = ball.x < 0 ? 0 : 1; ball.owner = null; ball.held = false;
   state = 'goal'; stateT = 4.0;
-  const scorer = ball.last && ball.last.team === team ? `${TEAMS[team].name} · №${ball.last.num}` : `${TEAMS[team].name} · автогол`;
+  const own = !(ball.last && ball.last.team === team);
+  const scorer = own ? `${TEAMS[team].name} · автогол` : `${ball.last.name} · №${ball.last.num}`;
+  if (team === humanTeam && !own) matchScorers.push(ball.last.name);
   showBanner('ГОЛ!', scorer, 3.2, true);
   Sound.whistle(1); Sound.goal();
   crowdUniforms.uJump.value = 1;
@@ -1772,6 +1914,9 @@ function endMatch() {
   setTimeout(() => {
     $('endTitle').textContent = score[0] > score[1] ? 'ПЕРЕМОГА!' : score[0] < score[1] ? 'ПОРАЗКА' : 'НІЧИЯ';
     $('endScore').textContent = `${score[0]} : ${score[1]}`;
+    const note = settings.mode !== 'match' ? Modes.record(score[0], score[1], matchScorers) : '';
+    $('endNote').textContent = note; $('endNote').classList.toggle('hidden', !note);
+    $('again').textContent = settings.mode === 'match' ? 'ЩЕ МАТЧ' : 'ДАЛІ';
     $('end').classList.remove('hidden');
   }, 2200);
 }
@@ -1832,13 +1977,14 @@ function updateCamera(dt, now) {
     const wide = camMode === 1;   // 0 — ближня трансляція, 1 — широкий план
     look.x = clamp(look.x, -L / 2 + (wide ? 12 : 2), L / 2 - (wide ? 12 : 2));
     look.z = clamp(look.z, -W / 2 + 4, W / 2 - 4);
-    const back = isMobile ? 12 : 19, hgt = isMobile ? 6.6 : 9;   // на телефоні камера ближче — гравці більші
-    pos = wide ? new T3.Vector3(look.x * 0.88, 19, W / 2 + 7.5 + look.z * 0.15) : new T3.Vector3(look.x * 0.95, hgt, Math.min(W / 2 + 7, look.z + back));
+    // трансляція: видно третину поля навколо м'яча; широкий план — майже половину
+    const back = wide ? 33 : 21, hgt = wide ? 17 : 9.5;   // нижчий кут — видно глибину поля, гравці більші
+    pos = new T3.Vector3(look.x * 0.92, hgt, Math.min(W / 2 + (wide ? 16 : 9), look.z + back));
   }
   const k = Math.min(1, dt * (demo ? 1 : closeUp ? 7 : 3.2));
   camT.lerp(look, k); camP.lerp(pos, Math.min(1, dt * (demo ? 1 : closeUp ? 5 : 2.5)));
   camera.position.copy(camP); camera.lookAt(camT);
-  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 38 : isMobile ? 31 : 34;
+  const fov = demo ? (isPortrait() ? 62 : 40) : camModeEff() === 2 && isPortrait() ? 60 : camMode === 1 ? 33 : 33;
   camera.fov = lerp(camera.fov, fov, k); camera.updateProjectionMatrix();
   sun.position.copy(camT).add(new T3.Vector3(-26, 60, -32)); sun.target.position.copy(camT); sun.target.updateMatrixWorld();
 }
@@ -1849,6 +1995,15 @@ const mm = $('minimap'), mmc = mm.getContext('2d');
 function fmtTime() {
   const gs = Math.min(90 * 60, Math.floor(clock / matchLen * 90 * 60));
   return `${String(Math.floor(gs / 60)).padStart(2, '0')}:${String(gs % 60).padStart(2, '0')}`;
+}
+// без м'яча кнопки міняють підписи: ПАС → ЗМІНА, УДАР → ВІДБІР
+let btnAtt = null;
+function updateBtnLabels() {
+  const att = !!ball.owner && ball.owner.team === humanTeam || (!!ctrl && ballDist(ctrl) < 1.6);
+  if (att === btnAtt) return; btnAtt = att;
+  $('tPass').textContent = att ? 'ПАС' : 'ЗМІНА';
+  $('tShoot').textContent = att ? 'УДАР' : 'ВІДБІР';
+  $('btns').classList.toggle('def', !att);
 }
 function updateHUD() { $('bScore').textContent = `${score[0]}–${score[1]}`; $('bTime').textContent = fmtTime(); }
 function drawMinimap() {
@@ -1900,7 +2055,8 @@ function render(dt, now) {
   }
   updateScreens();
   renderer.render(scene, camera);
-  if (!demo) { updateHUD(); drawMinimap(); updatePowerBar(); }
+  updateNames();
+  if (!demo) { updateHUD(); drawMinimap(); updatePowerBar(); updateBtnLabels(); }
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) bannerEl.classList.remove('show'); }
 }
 
@@ -1940,10 +2096,33 @@ function goFullscreen() {   // на телефоні гра відкриваєт
   } catch (e) { /* браузер не дозволив — граємо як є */ }
 }
 function exitFullscreen() { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* ок */ } }
+(() => {   // вибір команд у меню
+  const draw = () => {
+    for (const [id, key] of [['clubHome', 'home'], ['clubAway', 'away']]) {
+      const el = $(id); el.innerHTML = '';
+      CLUBS.forEach((c, i) => {
+        const b = document.createElement('button');
+        b.innerHTML = `${clubBadge(i)}${esc(c.name)}`;
+        if (settings[key] === i) b.classList.add('on');
+        b.onclick = () => {
+          const other = key === 'home' ? 'away' : 'home';
+          if (settings[other] === i) settings[other] = settings[key];   // не можна грати самим із собою — міняємо місцями
+          settings[key] = i; draw();
+          if (demo && window.__started) startMatch(true);
+        };
+        el.appendChild(b);
+      });
+    }
+  };
+  draw(); window.drawClubs = draw;
+  const modeSync = () => $('optAway').classList.toggle('hidden', settings.mode !== 'match');
+  document.querySelector('[data-opt="mode"]').addEventListener('click', () => setTimeout(modeSync));
+  modeSync();
+})();
 function play() {
   Sound.init();
   if (isMobile && !document.fullscreenElement) goFullscreen();
-  ['menu', 'end', 'pause'].forEach((id) => $(id).classList.add('hidden'));
+  ['menu', 'end', 'pause', 'hub'].forEach((id) => $(id).classList.add('hidden'));
   $('hud').classList.remove('hidden');
   if (isMobile || 'ontouchstart' in window) $('touch').classList.remove('hidden');
   paused = false;
@@ -1951,7 +2130,8 @@ function play() {
   camP.set(0, 20, 42);
 }
 function toMenu() {
-  ['end', 'pause', 'hud'].forEach((id) => $(id).classList.add('hidden'));
+  ['end', 'pause', 'hud', 'hub'].forEach((id) => $(id).classList.add('hidden'));
+  if (window.drawClubs) window.drawClubs();
   $('menu').classList.remove('hidden'); $('touch').classList.add('hidden');
   paused = false; Sound.crowdTo(0.03);
   startMatch(true);
@@ -1961,8 +2141,272 @@ function togglePause() {
   paused = !paused;
   $('pause').classList.toggle('hidden', !paused);
 }
-$('play').onclick = play; $('again').onclick = play;
+$('play').onclick = () => (settings.mode === 'match' ? play() : Modes.open());
+$('again').onclick = () => (settings.mode === 'match' ? play() : Modes.open());
 $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').onclick = toMenu; $('tPause').onclick = togglePause; $('tCam').onclick = nextCam;
+
+
+// ───────────────────────── Редактор команд ─────────────────────────
+const Editor = (() => {
+  const ROLES = ['ВР', 'ЗАХ', 'ЗАХ', 'ЗАХ', 'ПЗ', 'ПЗ', 'НАП'];
+  let cur = 0, crest = null;
+  const ed = (id) => $(id);
+  const toInt = (v) => parseInt(v.slice(1), 16);
+  function persist() { try { localStorage.setItem(EDIT_KEY, JSON.stringify(EDITS)); } catch (e) { alert('Не вдалося зберегти: замало місця на пристрої.'); } }
+  function rowsHtml() {
+    const c = CLUBS[cur], names = c.players || [], nums = c.nums || NUMS, pool = clubNames(cur);
+    let k = 0;
+    return '<div class="br-h">СКЛАД</div>' + ROLES.map((r, i) => {
+      const nm = names[i] || pool[k++];
+      return `<div class="ed-pl"><span class="ed-role">${r}</span><input class="ed-num" type="number" min="1" max="99" inputmode="numeric" value="${nums[i] || NUMS[i]}"><input class="ed-name" maxlength="14" value="${esc(nm)}"></div>`;
+    }).join('');
+  }
+  function crestPrev() { ed('edCrestPrev').innerHTML = crest ? `<img src="${crest}" alt="">` : '<span>немає</span>'; ed('edCrestDel').classList.toggle('hidden', !crest); }
+  function render() {
+    const box = ed('edClubs'); box.innerHTML = '';
+    CLUBS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.innerHTML = `${clubBadge(i)}${esc(c.name)}`;
+      if (i === cur) b.classList.add('on');
+      b.onclick = () => { collect(); cur = i; render(); };
+      box.appendChild(b);
+    });
+    const c = CLUBS[cur];
+    ed('edName').value = c.name; ed('edShort').value = c.short;
+    ed('edShirt').value = hexStr(c.shirt); ed('edTrim').value = hexStr(c.trim);
+    ed('edShorts').value = hexStr(c.shorts); ed('edSocks').value = hexStr(c.socks); ed('edGk').value = hexStr(c.gk);
+    ed('edStripeOn').checked = c.stripe !== undefined; ed('edStripe').value = hexStr(c.stripe !== undefined ? c.stripe : 0x111111);
+    crest = c.crest; crestPrev();
+    ed('edPlayers').innerHTML = rowsHtml();
+  }
+  function collect() {
+    const d = CLUB_DEFAULTS[cur], e = {};
+    const name = ed('edName').value.trim().toUpperCase().slice(0, 14), short = ed('edShort').value.trim().toUpperCase().slice(0, 3);
+    if (name && name !== d.name) e.name = name;
+    if (short && short !== d.short) e.short = short;
+    for (const [k, id] of [['shirt', 'edShirt'], ['trim', 'edTrim'], ['shorts', 'edShorts'], ['socks', 'edSocks'], ['gk', 'edGk']]) {
+      const v = toInt(ed(id).value); if (v !== d[k]) e[k] = v;
+    }
+    const sOn = ed('edStripeOn').checked, sv = toInt(ed('edStripe').value);
+    if (!sOn && d.stripe !== undefined) e.stripe = null;
+    if (sOn && sv !== d.stripe) e.stripe = sv;
+    if (crest) e.crest = crest;
+    const pool = clubNames(cur);
+    const names = [...document.querySelectorAll('#edPlayers .ed-name')].map((x) => x.value.trim().toUpperCase().slice(0, 14));
+    const nums = [...document.querySelectorAll('#edPlayers .ed-num')].map((x, i) => clamp(parseInt(x.value, 10) || NUMS[i], 1, 99));
+    if (names.some((n, i) => n && n !== pool[i])) e.players = names.map((n, i) => n || pool[i]);
+    if (nums.some((n, i) => n !== NUMS[i])) e.nums = nums;
+    if (Object.keys(e).length) EDITS[cur] = e; else delete EDITS[cur];
+    persist(); applyEdits();
+  }
+  function loadCrest(file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const S = 96, cv = document.createElement('canvas'); cv.width = cv.height = S;
+        const g = cv.getContext('2d'), k = Math.min(S / img.width, S / img.height), w = img.width * k, h = img.height * k;
+        g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+        crest = cv.toDataURL('image/png'); crestPrev();
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  }
+  function open() {
+    cur = settings.home; render();
+    $('menu').classList.add('hidden'); $('editor').classList.remove('hidden');
+  }
+  function close() {
+    $('editor').classList.add('hidden'); $('menu').classList.remove('hidden');
+    if (window.drawClubs) window.drawClubs();
+    startMatch(true);
+  }
+  ed('edCrestFile').onchange = (e) => { loadCrest(e.target.files[0]); e.target.value = ''; };
+  ed('edCrestDel').onclick = () => { crest = null; crestPrev(); };
+  ed('edSave').onclick = () => { collect(); render(); const b = ed('edSave'); b.textContent = 'ЗБЕРЕЖЕНО ✓'; setTimeout(() => (b.textContent = 'ЗБЕРЕГТИ'), 1200); };
+  ed('edBack').onclick = () => { collect(); close(); };
+  ed('edReset').onclick = () => { if (!confirm(`Повернути клуб ${CLUBS[cur].name} як було?`)) return; delete EDITS[cur]; persist(); applyEdits(); render(); };
+  $('openEditor').onclick = open;
+  return { open };
+})();
+
+// ───────────────────────── Режими: турнір і кар'єра ─────────────────────────
+const Modes = (() => {
+  const KEY = { cup: 'goleador-cup-v1', career: 'goleador-career-v1' };
+  const load = (m) => { try { return JSON.parse(localStorage.getItem(KEY[m])); } catch (e) { return null; } };
+  const save = (m, st) => { try { localStorage.setItem(KEY[m], JSON.stringify(st)); } catch (e) { /* приватний режим — без збереження */ } };
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const pois = (l) => { let k = 0, p = 1; const e = Math.exp(-l); do { k++; p *= Math.random(); } while (p > e); return k - 1; };
+  const tag = (i, me) => `<span class="tm${me ? ' me' : ''}">${clubBadge(i)}${esc(CLUBS[i].name)}</span>`;
+  let st = null, mode = null;
+  const rt = (i) => CLUBS[i].rt + (st && st.boost && i === st.club ? st.boost : 0);
+  function sim(a, b) { const d = (rt(a) - rt(b)) * 0.07; return [pois(clamp(1.35 + d, 0.3, 3.2)), pois(clamp(1.35 - d, 0.3, 3.2))]; }
+  function pens() {
+    let a = 0, b = 0;
+    for (let i = 0; i < 5; i++) { a += Math.random() < 0.75; b += Math.random() < 0.75; }
+    while (a === b) { a += Math.random() < 0.75; b += Math.random() < 0.75; }
+    return [a, b];
+  }
+
+  // ── Турнір: 8 клубів, на вибування ──
+  const STAGES = ['ЧВЕРТЬФІНАЛ', 'ПІВФІНАЛ', 'ФІНАЛ'];
+  const pairUp = (t) => { const r = []; for (let i = 0; i < t.length; i += 2) r.push({ a: t[i], b: t[i + 1], ga: null, gb: null, pa: null, pb: null }); return r; };
+  const winner = (m) => (m.ga > m.gb || (m.ga === m.gb && m.pa > m.pb) ? m.a : m.b);
+  function newCup(club) {
+    const others = shuffle(CLUBS.map((_, i) => i).filter((i) => i !== club)).slice(0, 7);
+    return { club, rounds: [pairUp(shuffle([club, ...others]))], stage: 0, out: false, champ: null, last: '' };
+  }
+  function playRound(r) {
+    for (const m of r) if (m.ga === null) { [m.ga, m.gb] = sim(m.a, m.b); if (m.ga === m.gb) [m.pa, m.pb] = pens(); }
+  }
+  function nextStage() {
+    const r = st.rounds[st.stage];
+    if (st.stage === 2) { st.champ = winner(r[0]); return; }
+    st.rounds.push(pairUp(r.map(winner))); st.stage++;
+  }
+  function cupMy() { return st.out || st.champ !== null ? null : st.rounds[st.stage].find((m) => m.a === st.club || m.b === st.club); }
+  function cupRecord(g, o) {
+    const m = cupMy(); if (!m) return '';
+    const home = m.a === st.club;
+    m.ga = home ? g : o; m.gb = home ? o : g;
+    let note = '';
+    if (g === o) { const [x, y] = pens(); m.pa = home ? x : y; m.pb = home ? y : x; note = `Серія пенальті ${x}:${y}. `; }
+    const won = winner(m) === st.club, stage = st.stage;
+    playRound(st.rounds[stage]); nextStage();
+    if (!won) { st.out = true; while (st.champ === null) { playRound(st.rounds[st.stage]); nextStage(); } }
+    note += won ? (stage === 2 ? 'Ви виграли Кубок! 🏆' : `Ви проходите у ${STAGES[stage + 1].toLowerCase()}!`) : `Ви вибули: ${STAGES[stage].toLowerCase()}.`;
+    st.last = note; return note;
+  }
+  function cupView() {
+    const my = cupMy();
+    let sub;
+    if (st.champ === st.club) sub = 'Ви — володар Кубка! 🏆';
+    else if (st.champ !== null) sub = `Кубок виграв ${CLUBS[st.champ].name}. ${st.last}`;
+    else sub = `${STAGES[st.stage]} · суперник: ${CLUBS[my.a === st.club ? my.b : my.a].name}`;
+    const card = (m) => {
+      const row = (i, g, p) => `<div class="br-row${m.ga !== null && winner(m) === i ? ' win' : ''}">${tag(i, i === st.club)}<b>${g === null ? '' : g}${p !== null ? `<small>(${p})</small>` : ''}</b></div>`;
+      return `<div class="br-card">${row(m.a, m.ga, m.pa)}${row(m.b, m.gb, m.pb)}</div>`;
+    };
+    let html = '<div class="bracket">';
+    for (let r = 0; r < 3; r++) {
+      const ms = st.rounds[r] || Array.from({ length: 4 >> r }, () => null);
+      html += `<div class="br-col"><div class="br-h">${STAGES[r]}</div><div class="br-list">${ms.map((m) => (m ? card(m) : '<div class="br-card empty"><div class="br-row">—</div><div class="br-row">—</div></div>')).join('')}</div></div>`;
+    }
+    html += `<div class="br-col champ"><div class="br-h">КУБОК</div><div class="br-list"><div class="cup">🏆</div>${st.champ !== null ? tag(st.champ, st.champ === st.club) : ''}</div></div></div>`;
+    return { title: 'КУБОК ГОЛЕАДОРА', sub, html, play: my ? 'ГРАТИ МАТЧ' : 'НОВИЙ ТУРНІР' };
+  }
+
+  // ── Кар'єра: сезон ліги з 10 клубів, кожен з кожним ──
+  function roundRobin(n) {
+    const ids = [...Array(n).keys()], rounds = [];
+    for (let r = 0; r < n - 1; r++) {
+      const rd = []; for (let i = 0; i < n / 2; i++) { const a = ids[i], b = ids[n - 1 - i]; rd.push(r % 2 ? [b, a] : [a, b]); }
+      rounds.push(rd); ids.splice(1, 0, ids.pop());
+    }
+    return shuffle(rounds);
+  }
+  const rank = (club) => CLUBS.map((_, i) => i).sort((a, b) => rt(b) - rt(a)).indexOf(club) + 1;
+  function newCareer(club, prev) {
+    const s = { club, season: 1, round: 0, fixtures: roundRobin(CLUBS.length), table: CLUBS.map(() => ({ p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 })), scorers: {}, titles: 0, boost: 0, history: [], last: '', news: [] };
+    if (prev) Object.assign(s, { season: prev.season + 1, titles: prev.titles, boost: prev.boost, history: prev.history });
+    const k = (st = s, rank(club));
+    s.target = k <= 2 ? 1 : k <= 4 ? 3 : k <= 7 ? 5 : 7;
+    s.news = [prev ? `Сезон ${s.season} стартує. ${prev.verdict}` : `Вас призначено тренером клубу ${CLUBS[club].name}!`, `Правління чекає: ${targetText(s.target)}.`];
+    return s;
+  }
+  const targetText = (t) => (t === 1 ? 'чемпіонство' : t === 3 ? 'місце в трійці' : `не нижче ${t}-го місця`);
+  const pts = (r) => r.w * 3 + r.d;
+  function order() { return st.table.map((r, i) => i).sort((a, b) => pts(st.table[b]) - pts(st.table[a]) || (st.table[b].gf - st.table[b].ga) - (st.table[a].gf - st.table[a].ga) || st.table[b].gf - st.table[a].gf); }
+  function apply(a, b, ga, gb) {
+    const A = st.table[a], B = st.table[b];
+    A.p++; B.p++; A.gf += ga; A.ga += gb; B.gf += gb; B.ga += ga;
+    if (ga > gb) { A.w++; B.l++; } else if (ga < gb) { B.w++; A.l++; } else { A.d++; B.d++; }
+  }
+  function carMy() { return st.round >= st.fixtures.length ? null : st.fixtures[st.round].find((f) => f.includes(st.club)); }
+  function carRecord(g, o, names) {
+    const f = carMy(); if (!f) return '';
+    const opp = f[0] === st.club ? f[1] : f[0];
+    apply(st.club, opp, g, o);
+    for (const n of names) st.scorers[n] = (st.scorers[n] || 0) + 1;
+    for (const x of st.fixtures[st.round]) if (x !== f) { const [ga, gb] = sim(x[0], x[1]); apply(x[0], x[1], ga, gb); }
+    st.round++;
+    const pos = order().indexOf(st.club) + 1;
+    const res = g > o ? 'Перемога' : g < o ? 'Поразка' : 'Нічия';
+    const top = Object.entries(st.scorers).sort((a, b) => b[1] - a[1])[0];
+    const vs = g > o ? 'над' : g < o ? 'від' : 'з';
+    st.news = [`${res} ${g}:${o} ${vs} ${CLUBS[opp].name}.`, `Ви на ${pos}-му місці.`];
+    if (names.length >= 2) st.news.push(`${names[0]} — герой матчу!`);
+    else if (top) st.news.push(`Найкращий бомбардир: ${top[0]} (${top[1]}).`);
+    let note = `${res}! Тур ${st.round} з ${st.fixtures.length}. Ви на ${pos}-му місці.`;
+    if (st.round >= st.fixtures.length) {
+      st.history.push({ season: st.season, pos });
+      if (pos === 1) st.titles++;
+      const ok = pos <= st.target;
+      if (ok) st.boost = Math.min(st.boost + 2, 10);
+      st.verdict = pos === 1 ? 'Ви чемпіони! Правління дало гроші на нових гравців.' : ok ? 'Правління задоволене і посилює склад.' : 'Правління незадоволене результатом.';
+      note = pos === 1 ? 'ВИ ЧЕМПІОНИ! 🏆' : `Сезон завершено: ${pos}-е місце. ${st.verdict}`;
+      st.news = [note, `Мета була: ${targetText(st.target)}.`];
+    }
+    st.last = note; return note;
+  }
+  function carView() {
+    const f = carMy(), done = !f;
+    const opp = f ? (f[0] === st.club ? f[1] : f[0]) : null;
+    const sub = done ? (order()[0] === st.club ? 'Ви чемпіони сезону! 🏆' : `Сезон завершено: ${order().indexOf(st.club) + 1}-е місце`)
+      : `Тур ${st.round + 1} з ${st.fixtures.length} · суперник: ${CLUBS[opp].name}`;
+    let html = '<div class="career"><table class="lg"><tr><th>#</th><th class="l">Клуб</th><th>І</th><th>В</th><th>Н</th><th>П</th><th>М</th><th>О</th></tr>';
+    order().forEach((i, k) => {
+      const r = st.table[i];
+      html += `<tr class="${i === st.club ? 'me' : ''}${k === 0 ? ' first' : ''}"><td>${k + 1}</td><td class="l">${tag(i, i === st.club)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}:${r.ga}</td><td><b>${pts(r)}</b></td></tr>`;
+    });
+    html += '</table><div class="news"><div class="br-h">НОВИНИ</div>' + st.news.map((n) => `<p>${esc(n)}</p>`).join('');
+    html += `<div class="br-h">КЛУБ</div><p>Мета: ${targetText(st.target)}</p><p>Трофеї: ${'🏆'.repeat(st.titles) || '—'}</p>`;
+    if (st.boost) html += `<p>Підсилення складу: +${st.boost}</p>`;
+    html += '</div></div>';
+    return { title: `КАР'ЄРА · СЕЗОН ${st.season}`, sub, html, play: done ? 'НОВИЙ СЕЗОН' : 'ГРАТИ ТУР' };
+  }
+
+  function render() {
+    const v = mode === 'cup' ? cupView() : carView();
+    $('hubTitle').textContent = v.title; $('hubSub').textContent = v.sub;
+    $('hubBody').innerHTML = v.html; $('hubPlay').textContent = v.play;
+  }
+  function open() {
+    mode = settings.mode;
+    st = load(mode);
+    if (!st) { st = mode === 'cup' ? newCup(settings.home) : newCareer(settings.home); save(mode, st); }
+    ['menu', 'end', 'pause', 'hud'].forEach((id) => $(id).classList.add('hidden'));
+    $('touch').classList.add('hidden');
+    if (!demo) startMatch(true);
+    render(); $('hub').classList.remove('hidden');
+  }
+  function playNext() {
+    if (mode === 'cup') {
+      const m = cupMy();
+      if (!m) { st = newCup(st.club); save(mode, st); render(); return; }
+      settings.home = st.club; settings.away = m.a === st.club ? m.b : m.a;
+    } else {
+      const f = carMy();
+      if (!f) { st = newCareer(st.club, st); save(mode, st); render(); return; }
+      settings.home = st.club; settings.away = f[0] === st.club ? f[1] : f[0];
+    }
+    play();
+  }
+  function record(g, o, names) {
+    mode = settings.mode; st = load(mode); if (!st) return '';
+    const n = mode === 'cup' ? cupRecord(g, o) : carRecord(g, o, names);
+    save(mode, st); return n;
+  }
+  function reset() {
+    if (!confirm('Почати заново? Поточний прогрес буде втрачено.')) return;
+    st = mode === 'cup' ? newCup(settings.home) : newCareer(settings.home); save(mode, st); render();
+  }
+  $('hubPlay').onclick = playNext; $('hubReset').onclick = reset;
+  $('hubMenu').onclick = () => { $('hub').classList.add('hidden'); toMenu(); };
+  return { open, record, get state() { return st; } };
+})();
 
 (() => {   // сенсорне керування: джойстик з'являється там, де торкнувся палець (ліва половина екрана)
   const zone = $('stickZone'), stick = $('stick'), knob = $('knob');
@@ -2000,6 +2444,8 @@ $('resume').onclick = togglePause; $('toMenu1').onclick = toMenu; $('toMenu2').o
   btn($('tPass'), () => (touch.passPress = true), () => {});
   btn($('tShoot'), () => { touch.shoot = true; touch.shootPress = true; }, () => { if (touch.shoot) { touch.shoot = false; touch.shootRelease = true; } });
   btn($('tSprint'), () => (touch.sprint = true), () => (touch.sprint = false));
+  btn($('tThrough'), () => (touch.throughPress = true), () => {});
+  btn($('tCross'), () => (touch.crossPress = true), () => {});
   const full = $('tFull');
   if (!canFullscreen()) full.classList.add('hidden');
   full.onclick = () => (document.fullscreenElement || document.webkitFullscreenElement ? exitFullscreen() : goFullscreen());
@@ -2019,7 +2465,7 @@ setTimeout(boot, 20000);   // якщо моделі довго вантажат�
 
 window.GOLEADOR = {
   get state() { return state; }, get score() { return score; }, get ball() { return ball; }, get players() { return players; },
-  get ctrl() { return ctrl; }, get clock() { return clock; }, get passTarget() { return passTarget; }, step, startMatch, play, settings, STATS, shootAt,
+  get ctrl() { return ctrl; }, get clock() { return clock; }, get passTarget() { return passTarget; }, get Modes() { return Modes; }, endMatch, get score() { return score; }, step, startMatch, play, settings, STATS, shootAt,
   setCam(m) { camMode = m; }, camera, render: () => { for (const p of players) animatePlayer(p); renderer.render(scene, camera); },
 };
 })();
